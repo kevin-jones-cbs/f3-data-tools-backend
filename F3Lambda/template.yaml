@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  MyExistingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: F3Lambda::F3Lambda.Function::FunctionHandler  
+      Runtime: dotnet6 
+      CodeUri: . 
+      MemorySize: 128
+      Timeout: 100
+      Events:
+        MyApi:
+          Type: Api
+          Properties:
+            Path: / 
+            Method: post

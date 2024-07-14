@@ -396,3 +396,6 @@ FodyWeavers.xsd
 
 # JetBrains Rider
 *.sln.iml
+
+# F3
+/F3Lambda/Secrets/SvcAct.json
