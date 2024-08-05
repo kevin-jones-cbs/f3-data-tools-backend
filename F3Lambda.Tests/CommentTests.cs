@@ -26,6 +26,7 @@ namespace F3Lambda.Tests
         [InlineData("@Peacock @Clark @Mani Pedi @Newonewordguy", 3, 1, "Newonewordguy")]
         [InlineData("Peacock Clark Mani Pedi Newonewordguy", 3, 1, "Newonewordguy")]
         [InlineData("Peacock Clark Mani Pedi Super Man", 3, 2, "Super")]
+        [InlineData("Peacock Peacock Peacock Clark Mani Pedi Super Man", 3, 2, "Super")]
         public void WithUnofficialNames(string comment, int expectedOfficialCount, int expectedUnofficialCount, string expectedUnofficialName)
         {
             var result = PaxHelper.GetPaxFromComment(comment, LambdaTestData.PaxNames);

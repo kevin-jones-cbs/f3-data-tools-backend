@@ -84,6 +84,9 @@ namespace F3Lambda.Data
                 }
             }
 
+            // Remove any duplicates from the matches
+            pax = pax.GroupBy(x => x.Name).Select(x => x.First()).ToList();
+
             // Remove anything that was found from comment
             foreach (var p in pax)
             {
