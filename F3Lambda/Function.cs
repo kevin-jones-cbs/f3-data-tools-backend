@@ -297,7 +297,7 @@ public class Function
             var aoList = await GetLocationsAsync(sheetsService);
 
             // Foreach loop for the last 7 days
-            for (int i = 7; i >= 0; i--)
+            for (int i = 6; i >= 0; i--)
             {
                 var date = DateTime.Now.AddDays(-i);
                 var dayOfWeek = date.DayOfWeek;
