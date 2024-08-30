@@ -25,6 +25,10 @@ namespace F3Lambda.Data
             { "Kick-Stand", "Kickstand" },
             { "Demogorgon", "DemiGorgon" },
             { "S'mores", "Smores" },
+            { "V Lookup", "V-Lookup" },
+            { "Hobbs", "Hobbes" },
+            { "Lil Oats", "Lil' Oats" },
+            { "Lightrail", "Light Rail" },
         };  
 
         public static List<Pax> GetPaxFromComment(string comment, List<string> allPax)

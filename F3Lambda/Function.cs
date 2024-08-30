@@ -463,25 +463,29 @@ public class Function
 
         batchUpdateRequest.Requests.Add(new Request { UpdateCells = qUpdate });
 
-        // Use the Google Sheets API to regex find the text Updated followed by the date and replace the date with the current date. Only search on the Master Data sheet
-        var findReplaceRequest = new FindReplaceRequest
+        // Set the last Updated Column, as long as this isn't a self reported downrange post
+        if (ao.Equals("Downrange", StringComparison.OrdinalIgnoreCase))
         {
-            Find = "UPDATED \\d{1,2}\\/\\d{1,2}\\/\\d{4}",
-            Replacement = $"UPDATED {DateTime.Now.ToShortDateString()}",
-            MatchCase = false,
-            MatchEntireCell = true,
-            SearchByRegex = true,
-            Range = new GridRange
+            // Use the Google Sheets API to regex find the text Updated followed by the date and replace the date with the current date. Only search on the Master Data sheet
+            var findReplaceRequest = new FindReplaceRequest
             {
-                SheetId = region.MasterDataSheetId,
-                StartRowIndex = 0,
-                EndRowIndex = int.MaxValue,
-                StartColumnIndex = region.MasterDataColumnIndicies.PaxName,
-                EndColumnIndex = region.MasterDataColumnIndicies.PaxName + 1
-            }
-        };
+                Find = "UPDATED \\d{1,2}\\/\\d{1,2}\\/\\d{4}",
+                Replacement = $"UPDATED {DateTime.Now.ToShortDateString()}",
+                MatchCase = false,
+                MatchEntireCell = true,
+                SearchByRegex = true,
+                Range = new GridRange
+                {
+                    SheetId = region.MasterDataSheetId,
+                    StartRowIndex = 0,
+                    EndRowIndex = int.MaxValue,
+                    StartColumnIndex = region.MasterDataColumnIndicies.PaxName,
+                    EndColumnIndex = region.MasterDataColumnIndicies.PaxName + 1
+                }
+            };
 
-        batchUpdateRequest.Requests.Add(new Request { FindReplace = findReplaceRequest });
+            batchUpdateRequest.Requests.Add(new Request { FindReplace = findReplaceRequest });
+        }
 
         // If there are any fngs, do another UpdateCellsRequest for the roster sheet
         if (pax.Any(x => x.IsFng))
