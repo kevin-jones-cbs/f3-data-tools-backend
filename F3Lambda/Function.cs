@@ -464,7 +464,7 @@ public class Function
         batchUpdateRequest.Requests.Add(new Request { UpdateCells = qUpdate });
 
         // Set the last Updated Column, as long as this isn't a self reported downrange post
-        if (ao.Equals("Downrange", StringComparison.OrdinalIgnoreCase))
+        if (!ao.Equals("Downrange", StringComparison.OrdinalIgnoreCase))
         {
             // Use the Google Sheets API to regex find the text Updated followed by the date and replace the date with the current date. Only search on the Master Data sheet
             var findReplaceRequest = new FindReplaceRequest
