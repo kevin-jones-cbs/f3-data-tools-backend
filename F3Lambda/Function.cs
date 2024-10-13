@@ -226,10 +226,13 @@ public class Function
 
         var pax = result.Values.Select(x => new Pax
         {
-            Name = x[paxNameIndex].ToString(),
-            DateJoined = x[joinDateIndex].ToString().Contains("/") ? DateTime.Parse(x[joinDateIndex].ToString()).ToShortDateString() : string.Empty,
-            NamingRegion = namingRegionNameIndex == -1 ? string.Empty : x[namingRegionNameIndex].ToString()
+            Name = paxNameIndex < x.Count ? x[paxNameIndex].ToString() : string.Empty,
+            DateJoined = joinDateIndex < x.Count && x[joinDateIndex].ToString().Contains("/") ? DateTime.Parse(x[joinDateIndex].ToString()).ToShortDateString() : string.Empty,
+            NamingRegion = namingRegionNameIndex == -1 || namingRegionNameIndex >= x.Count ? string.Empty : x[namingRegionNameIndex]?.ToString() ?? string.Empty
         }).ToList();
+
+        // Clear out any roster items without names
+        pax = pax.Where(x => !string.IsNullOrEmpty(x.Name)).ToList();
 
         var rtn = new AllData
         {
@@ -354,19 +357,26 @@ public class Function
             return cachedData;
         }
 
-        var result = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.AosSheetName}!A2:O").ExecuteAsync();
-        var aos = result.Values
-            .Where(x => Enum.TryParse(x[region.AoColumnIndicies.DayOfWeek].ToString(), out DayOfWeek _) &&
-                       (x.Count <= region.AoColumnIndicies.Retired || x[region.AoColumnIndicies.Retired].ToString() == region.AosRetiredIndicator)) // Ensure it's not retired
-            .Select(x =>
+        var aoResult = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.AosSheetName}!A2:O").ExecuteAsync();
+        var aos = new List<Ao>();
+
+        foreach (var row in aoResult.Values)
+        {
+            // Found an empty row, we're done, as there is likely data below this we don't want
+            if (row.Count < 1) break; 
+
+            if (Enum.TryParse(row[region.AoColumnIndicies.DayOfWeek].ToString(), out DayOfWeek _) &&
+                (row.Count <= region.AoColumnIndicies.Retired ||
+                row[region.AoColumnIndicies.Retired].ToString() == region.AosRetiredIndicator)) // Ensure it's not retired
             {
-                return new Ao
+                aos.Add(new Ao
                 {
-                    Name = x[region.AoColumnIndicies.Name].ToString(),
-                    City = x[region.AoColumnIndicies.City].ToString(),
-                    DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), x[region.AoColumnIndicies.DayOfWeek].ToString())
-                };
-            }).ToList();
+                    Name = row[region.AoColumnIndicies.Name].ToString(),
+                    City = row[region.AoColumnIndicies.City].ToString(),
+                    DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), row[region.AoColumnIndicies.DayOfWeek].ToString())
+                });
+            }
+        }
 
         // Save to Cache
         var serialized = JsonSerializer.Serialize(aos);
