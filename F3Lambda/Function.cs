@@ -254,10 +254,12 @@ public class Function
                     IsQ = x.Count > region.MasterDataColumnIndicies.QSourceQ ? x[region.MasterDataColumnIndicies.QSourceQ].ToString() == "1" : false,
                 }).ToList();
 
-            // Remove the q source posts from the master data
+            // Remove the q source posts from the master data (unless it's attached to a normal post)
             masterDataSheet.Values = masterDataSheet.Values
-                .Where(x => !(x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost].ToString() == "1"))
+                .Where(x => !(x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost]?.ToString() == "1") ||
+                             (x.Count > region.MasterDataColumnIndicies.Post && x[region.MasterDataColumnIndicies.Post]?.ToString() == "1"))
                 .ToList();
+
         }
 
         var posts = masterDataSheet.Values.Select(x => new Post
