@@ -222,7 +222,8 @@ public class Function
             {
                 PaxName = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
                 PostCount = x.Count > region.MasterDataColumnIndicies.Post && int.TryParse(x[region.MasterDataColumnIndicies.Post].ToString(), out var postCount) ? postCount : 0,
-                QCount = x.Count > region.MasterDataColumnIndicies.Q && int.TryParse(x[region.MasterDataColumnIndicies.Q].ToString(), out var qCount) ? qCount : 0
+                QCount = x.Count > region.MasterDataColumnIndicies.Q && int.TryParse(x[region.MasterDataColumnIndicies.Q].ToString(), out var qCount) ? qCount : 0,
+                FirstPost = x.Count > region.MasterDataColumnIndicies.Date ? DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()) : DateTime.MinValue
             })
             // Group by pax name as there may be multiple entries for the same pax
             .GroupBy(x => x.PaxName)
@@ -231,7 +232,8 @@ public class Function
             {
                 PaxName = x.Key,
                 PostCount = x.Sum(y => y.PostCount),
-                QCount = x.Sum(y => y.QCount)
+                QCount = x.Sum(y => y.QCount),
+                FirstPost = x.Min(y => y.FirstPost)
             }).ToList();
 
             // Remove the historical data from the master data
