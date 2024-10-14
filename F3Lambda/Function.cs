@@ -208,8 +208,59 @@ public class Function
             return cachedData;
         }
 
-        var valueRange = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A2:O").ExecuteAsync();
-        var posts = valueRange.Values.Select(x => new Post
+        var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A2:O").ExecuteAsync();
+
+        // If the region has historical data, get it
+        List<HistoricalData> historicalData = null;
+        if (region.HasHistoricalData)
+        {
+            historicalData = masterDataSheet.Values
+            // Look for site named "Archive"
+            .Where(x => x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() == "Archive" : false)    
+            // Grab the name, post count, and Q count
+            .Select(x => new HistoricalData
+            {
+                PaxName = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
+                PostCount = x.Count > region.MasterDataColumnIndicies.Post && int.TryParse(x[region.MasterDataColumnIndicies.Post].ToString(), out var postCount) ? postCount : 0,
+                QCount = x.Count > region.MasterDataColumnIndicies.Q && int.TryParse(x[region.MasterDataColumnIndicies.Q].ToString(), out var qCount) ? qCount : 0
+            })
+            // Group by pax name as there may be multiple entries for the same pax
+            .GroupBy(x => x.PaxName)
+            // Sum the post and Q counts
+            .Select(x => new HistoricalData
+            {
+                PaxName = x.Key,
+                PostCount = x.Sum(y => y.PostCount),
+                QCount = x.Sum(y => y.QCount)
+            }).ToList();
+
+            // Remove the historical data from the master data
+            masterDataSheet.Values = masterDataSheet.Values
+                .Where(x => !(x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() == "Archive" : false))
+                .ToList();
+        }
+
+        List<Post> qSourcePosts = null;
+        if (region.HasQSourcePosts)
+        {
+            // Get the Q Source posts
+            qSourcePosts = masterDataSheet.Values
+                .Where(x => x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost].ToString() == "1")
+                .Select(x => new Post
+                {
+                    Date = DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()),
+                    Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
+                    Pax = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
+                    IsQ = x.Count > region.MasterDataColumnIndicies.QSourceQ ? x[region.MasterDataColumnIndicies.QSourceQ].ToString() == "1" : false,
+                }).ToList();
+
+            // Remove the q source posts from the master data
+            masterDataSheet.Values = masterDataSheet.Values
+                .Where(x => !(x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost].ToString() == "1"))
+                .ToList();
+        }
+
+        var posts = masterDataSheet.Values.Select(x => new Post
         {
             Date = DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()),
             Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
@@ -218,13 +269,13 @@ public class Function
         }).ToList();
 
         // Get the roster
-        var result = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A4:F").ExecuteAsync();
+        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A4:F").ExecuteAsync();
 
         var paxNameIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.PaxName);
         var joinDateIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.JoinDate);
         var namingRegionNameIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionName) == -1 ? region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionYN) : region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionName);
 
-        var pax = result.Values.Select(x => new Pax
+        var pax = rosterSheet.Values.Select(x => new Pax
         {
             Name = paxNameIndex < x.Count ? x[paxNameIndex].ToString() : string.Empty,
             DateJoined = joinDateIndex < x.Count && x[joinDateIndex].ToString().Contains("/") ? DateTime.Parse(x[joinDateIndex].ToString()).ToShortDateString() : string.Empty,
@@ -234,14 +285,17 @@ public class Function
         // Clear out any roster items without names
         pax = pax.Where(x => !string.IsNullOrEmpty(x.Name)).ToList();
 
+        // Get the AOs
+        var aos = await GetLocationsAsync(sheetsService);
+
         var rtn = new AllData
         {
             Posts = posts,
-            Pax = pax
+            Pax = pax,
+            Aos = aos,
+            HistoricalData = historicalData,
+            QSourcePosts = qSourcePosts
         };
-
-        var aos = await GetLocationsAsync(sheetsService);
-        rtn.Aos = aos;
 
         // Exclude any "archived" pax
         rtn.Pax = rtn.Pax.Where(x => !x.Name.Contains("(Archived)")).ToList();
@@ -265,7 +319,6 @@ public class Function
 
         // Deserialize the json
         return compress ? compressedJson : json;
-
 
         // Inline Functions
         static string Compress(string plainText)

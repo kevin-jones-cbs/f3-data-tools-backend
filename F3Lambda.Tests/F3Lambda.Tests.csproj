@@ -16,7 +16,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="F3Core">
-      <HintPath>..\Packages\F3Core.dll</HintPath>
+      <HintPath>..\F3Lambda\Packages\F3Core.dll</HintPath>
     </Reference>
   </ItemGroup>
 </Project>
