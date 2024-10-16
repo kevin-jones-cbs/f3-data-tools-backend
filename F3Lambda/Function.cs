@@ -68,7 +68,7 @@ public class Function
             // Add Pax
             if (functionInput.Action == "AddPax")
             {
-                await AddPaxToSheetAsync(sheetsService, functionInput.Pax, functionInput.QDate, functionInput.AoName);
+                await AddPaxToSheetAsync(sheetsService, functionInput.Pax, functionInput.QDate, functionInput.AoName, functionInput.IsQSource);
                 result = "Pax Added";
             }
 
@@ -442,7 +442,7 @@ public class Function
         return aos;
     }
 
-    private async Task AddPaxToSheetAsync(SheetsService sheetsService, List<Pax> pax, DateTime qDate, string ao)
+    private async Task AddPaxToSheetAsync(SheetsService sheetsService, List<Pax> pax, DateTime qDate, string ao, bool isQSource)
     {
         var batchUpdateRequest = new BatchUpdateSpreadsheetRequest
         {
@@ -506,7 +506,7 @@ public class Function
 
         // Post Column
         var postUpdate = GetDefaultUpdateCellsRequest();
-        postUpdate.Start.ColumnIndex = region.MasterDataColumnIndicies.Post;
+        postUpdate.Start.ColumnIndex = isQSource ? region.MasterDataColumnIndicies.QSourcePost : region.MasterDataColumnIndicies.Post;
         foreach (var member in pax)
         {
             postUpdate.Rows.Add(new RowData
@@ -519,7 +519,7 @@ public class Function
 
         // Q Column
         var qUpdate = GetDefaultUpdateCellsRequest();
-        qUpdate.Start.ColumnIndex = region.MasterDataColumnIndicies.Q;
+        qUpdate.Start.ColumnIndex = isQSource ? region.MasterDataColumnIndicies.QSourceQ : region.MasterDataColumnIndicies.Q;
         foreach (var member in pax)
         {
             qUpdate.Rows.Add(new RowData
