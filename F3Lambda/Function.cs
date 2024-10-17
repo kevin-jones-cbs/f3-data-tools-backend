@@ -270,6 +270,7 @@ public class Function
             Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
             Pax = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
             IsQ = x.Count > region.MasterDataColumnIndicies.Q ? x[region.MasterDataColumnIndicies.Q].ToString() == "1" : false,
+            IsFNG = x.Count > region.MasterDataColumnIndicies.Fng ? x[region.MasterDataColumnIndicies.Fng].ToString() == "1" : false
         }).ToList();
 
         // Get the roster
