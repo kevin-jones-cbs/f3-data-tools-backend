@@ -274,7 +274,7 @@ public class Function
         }).ToList();
 
         // Get the roster
-        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A4:F").ExecuteAsync();
+        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A2:F").ExecuteAsync();
 
         var paxNameIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.PaxName);
         var joinDateIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.JoinDate);
