@@ -107,6 +107,20 @@ public class Function
                 result = locations;
             }
 
+            // GetJson
+            if (functionInput.Action == "GetJson")
+            {
+                var allData = await GetJson(sheetsService, functionInput.JsonRow);
+                result = allData;
+            }
+
+            // SaveJson
+            if (functionInput.Action == "SaveJson")
+            {
+                await SaveJson(sheetsService, functionInput.Json, functionInput.JsonRow);
+                result = "Json Saved";
+            }
+
             if (result == null)
             {
                 result = "Error, unknown action";
@@ -196,6 +210,25 @@ public class Function
         var pax = PaxHelper.GetPaxFromComment(comment, allPax);
 
         return pax;
+    }
+
+    private async Task<string> GetJson(SheetsService sheetsService, short row)
+    {
+        var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"JSON!A{row}").ExecuteAsync();
+        var json = masterDataSheet.Values.FirstOrDefault()?.FirstOrDefault()?.ToString();
+        return json;
+    }
+
+    private async Task SaveJson(SheetsService sheetsService, string json, short row)
+    {
+        var valueRange = new ValueRange
+        {
+            Values = new List<IList<object>> { new List<object> { json } }
+        };
+
+        var updateRequest = sheetsService.Spreadsheets.Values.Update(valueRange, region.SpreadsheetId, $"JSON!A{row}");
+        updateRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.RAW;
+        await updateRequest.ExecuteAsync();
     }
 
     private async Task<string> GetAllDataAsync(SheetsService sheetsService, bool compress = true)
