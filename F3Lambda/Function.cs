@@ -121,6 +121,24 @@ public class Function
                 result = "Json Saved";
             }
 
+            // Save to cache
+            if (functionInput.Action == "SaveToCache")
+            {
+                await CacheHelper.SetCachedDataAsync(region, functionInput.CacheKey, functionInput.CacheValue);
+                result = "Saved to Cache";
+            }
+
+            // Get from cache
+            if (functionInput.Action == "GetFromCache")
+            {
+                var cacheValue = await CacheHelper.GetCachedDataAsync<string>(region, functionInput.CacheKey);
+                result = cacheValue;
+                if (result == null)
+                {
+                    result = "Miss";
+                }
+            }
+
             if (result == null)
             {
                 result = "Error, unknown action";

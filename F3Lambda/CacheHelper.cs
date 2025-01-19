@@ -4,14 +4,10 @@ using Momento.Sdk.Config;
 using Momento.Sdk.Responses;
 using F3Core.Regions;
 using System.Text.Json;
+using F3Core;
 
 namespace F3Lambda.Data
 {
-    public enum CacheKeyType
-    {
-        AllData, Locations, Close100s
-    }
-
     public static class CacheHelper
     {
         private static ICredentialProvider authProvider = new EnvMomentoTokenProvider("F3_MOMENTO_TOKEN");
@@ -27,6 +23,8 @@ namespace F3Lambda.Data
                     return $"Locations_{region.DisplayName}";
                 case CacheKeyType.Close100s:
                     return $"Close100s_{region.DisplayName}";
+                case CacheKeyType.AllDataSummary:
+                    return $"AllDataSummary_{region.DisplayName}";
                 default:
                     return string.Empty;
             }

@@ -1,0 +1,3 @@
+{
+    "Body": "{\"Action\":\"GetFromCache\", \"Region\": \"southfork\", \"CacheKey\": 3}"
+}
