@@ -496,7 +496,7 @@ public class Function
 
     private async Task AddPaxToSheetAsync(SheetsService sheetsService, List<Pax> pax, DateTime qDate, string ao, bool isQSource)
     {
-        var batchUpdateRequest = new BatchUpdateSpreadsheetRequest
+         var batchUpdateRequest = new BatchUpdateSpreadsheetRequest
         {
             Requests = new List<Request>()
         };
@@ -594,7 +594,7 @@ public class Function
                 {
                     SheetId = region.RosterSheetId,
                     RowIndex = rosterCount,
-                    ColumnIndex = 1
+                    ColumnIndex = 0
                 },
                 Rows = new List<RowData>(),
                 Fields = "userEnteredValue"
@@ -635,9 +635,6 @@ public class Function
                             break;
                     }
                 }
-
-                // Remove the first column.
-                rowData.Values.RemoveAt(0);
 
                 updateFngCellsRequest.Rows.Add(rowData);
             }
