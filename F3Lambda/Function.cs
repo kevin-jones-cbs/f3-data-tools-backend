@@ -1,31 +1,26 @@
-using System.Buffers;
-using System.Diagnostics;
-using System.IO.Compression;
-using System.Text;
-using System.Text.Json;
 using Amazon.Lambda.APIGatewayEvents;
 using Amazon.Lambda.Core;
+using F3Core;
+using F3Core.Regions;
+using F3Lambda.Data;
 using F3Lambda.Models;
 using Google.Apis.Auth.OAuth2;
 using Google.Apis.Services;
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
-using F3Core;
-using F3Core.Regions;
-using F3Lambda.Data;
-using System.Globalization;
-using System.Diagnostics.CodeAnalysis;
-using System.IO;
+using System.IO.Compression;
+using System.Text;
+using System.Text.Json;
+
+using System;
+using System.Collections.Generic;
 
 // Assembly attribute to enable the Lambda function's JSON input to be converted into a .NET class.
 [assembly: LambdaSerializer(typeof(Amazon.Lambda.Serialization.SystemTextJson.DefaultLambdaJsonSerializer))]
-
 namespace F3Lambda;
 
 public class Function
 {
-    private Region region;
-
     public async Task<object> FunctionHandler(APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
     {
         try
@@ -42,9 +37,9 @@ public class Function
             }
 
             // Get the region
-            region = RegionList.GetRegion(functionInput.Region);
+            var region = RegionList.GetRegion(functionInput.Region);
 
-            if (region == null)
+            if (region == null && functionInput.Action != "GetSectorData")
             {
                 result = "Error, no region specified";
             }
@@ -54,42 +49,42 @@ public class Function
             // Get recent posts
             if (functionInput.Action == "GetMissingAos")
             {
-                var recentPosts = await GetMissingAosAsync(sheetsService);
+                var recentPosts = await GetMissingAosAsync(sheetsService, region);
                 result = recentPosts;
             }
 
             // Get The Pax
             if (functionInput.Action == "GetPax")
             {
-                var paxNames = await GetPaxNamesAsync(sheetsService);
+                var paxNames = await GetPaxNamesAsync(sheetsService, region);
                 result = paxNames;
             }
 
             // Add Pax
             if (functionInput.Action == "AddPax")
             {
-                await AddPaxToSheetAsync(sheetsService, functionInput.Pax, functionInput.QDate, functionInput.AoName, functionInput.IsQSource);
+                await AddPaxToSheetAsync(sheetsService, region, functionInput.Pax, functionInput.QDate, functionInput.AoName, functionInput.IsQSource);
                 result = "Pax Added";
             }
 
             // Get all posts
             if (functionInput.Action == "GetAllPosts")
             {
-                var allPosts = await GetAllDataAsync(sheetsService);
+                var allPosts = await GetAllDataAsync(sheetsService, region);
                 result = allPosts;
             }
 
             // GetPaxFromComment
             if (functionInput.Action == "GetPaxFromComment")
             {
-                var pax = await GetPaxFromCommentAsync(sheetsService, functionInput.Comment);
+                var pax = await GetPaxFromCommentAsync(sheetsService, region, functionInput.Comment);
                 result = pax;
             }
 
             // CheckClose100s
             if (functionInput.Action == "CheckClose100s")
             {
-                await CheckClose100sAsync(sheetsService);
+                await CheckClose100sAsync(sheetsService, region);
                 result = "Done";
             }
 
@@ -103,21 +98,21 @@ public class Function
             // GetLocations
             if (functionInput.Action == "GetLocations")
             {
-                var locations = await GetLocationsAsync(sheetsService);
+                var locations = await GetLocationsAsync(sheetsService, region);
                 result = locations;
             }
 
             // GetJson
             if (functionInput.Action == "GetJson")
             {
-                var allData = await GetJson(sheetsService, functionInput.JsonRow);
+                var allData = await GetJson(sheetsService, region, functionInput.JsonRow);
                 result = allData;
             }
 
             // SaveJson
             if (functionInput.Action == "SaveJson")
             {
-                await SaveJson(sheetsService, functionInput.Json, functionInput.JsonRow);
+                await SaveJson(sheetsService, region, functionInput.Json, functionInput.JsonRow);
                 result = "Json Saved";
             }
 
@@ -137,6 +132,13 @@ public class Function
                 {
                     result = "Miss";
                 }
+            }
+
+            // GetSectorData
+            if (functionInput.Action == "GetSectorData")
+            {
+                var sectorData = await GetSectorDataAsync(sheetsService);
+                result = sectorData;
             }
 
             if (result == null)
@@ -170,9 +172,9 @@ public class Function
         }
     }
 
-    private async Task CheckClose100sAsync(SheetsService sheetsService)
+    private async Task CheckClose100sAsync(SheetsService sheetsService, Region region)
     {
-        var allDataCompressed = await GetAllDataAsync(sheetsService, compress: false);
+        var allDataCompressed = await GetAllDataAsync(sheetsService, region, compress: false);
 
         var options = new JsonSerializerOptions
         {
@@ -222,22 +224,22 @@ public class Function
         await CacheHelper.SetCachedDataAsync(region, CacheKeyType.Close100s, serialized);
     }
 
-    private async Task<List<Pax>> GetPaxFromCommentAsync(SheetsService sheetsService, string comment)
+    private async Task<List<Pax>> GetPaxFromCommentAsync(SheetsService sheetsService, Region region, string comment)
     {
-        var allPax = await GetPaxNamesAsync(sheetsService);
+        var allPax = await GetPaxNamesAsync(sheetsService, region);
         var pax = PaxHelper.GetPaxFromComment(comment, allPax);
 
         return pax;
     }
 
-    private async Task<string> GetJson(SheetsService sheetsService, short row)
+    private async Task<string> GetJson(SheetsService sheetsService, Region region, short row)
     {
         var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"JSON!A{row}").ExecuteAsync();
         var json = masterDataSheet.Values.FirstOrDefault()?.FirstOrDefault()?.ToString();
         return json;
     }
 
-    private async Task SaveJson(SheetsService sheetsService, string json, short row)
+    private async Task SaveJson(SheetsService sheetsService, Region region, string json, short row)
     {
         var valueRange = new ValueRange
         {
@@ -249,7 +251,7 @@ public class Function
         await updateRequest.ExecuteAsync();
     }
 
-    private async Task<string> GetAllDataAsync(SheetsService sheetsService, bool compress = true)
+    private async Task<string> GetAllDataAsync(SheetsService sheetsService, Region region, bool compress = true)
     {
         var cacheKeyType = CacheKeyType.AllData;
         var cachedData = await CacheHelper.GetCachedDataAsync<string>(region, cacheKeyType);
@@ -342,7 +344,7 @@ public class Function
         pax = pax.Where(x => !string.IsNullOrEmpty(x.Name)).ToList();
 
         // Get the AOs
-        var aos = await GetLocationsAsync(sheetsService);
+        var aos = await GetLocationsAsync(sheetsService, region);
 
         var rtn = new AllData
         {
@@ -396,7 +398,7 @@ public class Function
         }
     }
 
-    private async Task<List<Ao>> GetMissingAosAsync(SheetsService sheetsService)
+    private async Task<List<Ao>> GetMissingAosAsync(SheetsService sheetsService, Region region)
     {
         try
         {
@@ -406,7 +408,7 @@ public class Function
             var dateIndex = region.MasterDataColumnIndicies.Date;
             var aoIndex = region.MasterDataColumnIndicies.Location;
             var qDates = valueRange.Values.Select(x => new { Dates = DateTime.Parse(x[dateIndex].ToString()), AoName = x[aoIndex].ToString() }).ToList();
-            var aoList = await GetLocationsAsync(sheetsService);
+            var aoList = await GetLocationsAsync(sheetsService, region);
 
             // Foreach loop for the last 7 days
             for (int i = 6; i >= 0; i--)
@@ -445,7 +447,7 @@ public class Function
         }
     }
 
-    private async Task<List<string>> GetPaxNamesAsync(SheetsService sheetsService)
+    private async Task<List<string>> GetPaxNamesAsync(SheetsService sheetsService, Region region)
     {
         var result = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!{region.RosterNameColumn}:{region.RosterNameColumn}").ExecuteAsync();
         var paxMembers = result.Values.Select(x => x.FirstOrDefault()?.ToString()).Where(x => x != null).Distinct().ToList();
@@ -456,7 +458,7 @@ public class Function
         return paxMembers;
     }
 
-    private async Task<List<Ao>> GetLocationsAsync(SheetsService sheetsService)
+    private async Task<List<Ao>> GetLocationsAsync(SheetsService sheetsService, Region region)
     {
         var cacheKeyType = CacheKeyType.Locations;
         var cachedData = await CacheHelper.GetCachedDataAsync<List<Ao>>(region, cacheKeyType);
@@ -494,7 +496,7 @@ public class Function
         return aos;
     }
 
-    private async Task AddPaxToSheetAsync(SheetsService sheetsService, List<Pax> pax, DateTime qDate, string ao, bool isQSource)
+    private async Task AddPaxToSheetAsync(SheetsService sheetsService, Region region, List<Pax> pax, DateTime qDate, string ao, bool isQSource)
     {
          var batchUpdateRequest = new BatchUpdateSpreadsheetRequest
         {
@@ -673,6 +675,85 @@ public class Function
 
             return updateCellsRequest;
         }
+    }
+
+    private async Task<List<SectorData>> GetSectorDataAsync(SheetsService sheetsService)
+    {
+        var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        // Get the data for each region in parallel
+        var tasks = allRegions.Select(async region =>
+        {
+            var allDataJson = await GetAllDataAsync(sheetsService, region, false);
+            return (region, allDataJson);
+        });
+
+        var allRegionData = await Task.WhenAll(tasks);
+
+        // Deserialize and store in a dictionary
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var allRegionDataDict = allRegionData.ToDictionary(
+            result => result.region,
+            result => JsonSerializer.Deserialize<AllData>(result.allDataJson, options)
+        );
+
+        // Create the sector data
+        var sectorData = new List<SectorData>();
+
+        foreach (var region in allRegionDataDict)
+        {
+            // Group by pax name
+            var paxPostCount = region.Value.Posts.GroupBy(x => x.Pax).Select(x => new PaxData(x.Key, x.Count(), x.Count(y => y.IsQ), x.Min(x => x.Date))).ToList();
+
+            // Handle historical data
+            if (region.Value.HistoricalData != null && region.Value.HistoricalData.Any())
+            {
+                // Group by pax name
+                var historicalPaxPostCount = region.Value.HistoricalData.GroupBy(x => x.PaxName).Select(x => new PaxData(x.Key, x.Sum(y => y.PostCount), x.Sum(y => y.QCount), x.Min(y => y.FirstPost.GetValueOrDefault()))).ToList();
+
+                // Create a dictionary for quick lookups
+                var historicalDict = historicalPaxPostCount.ToDictionary(h => h.PaxName, h => h);
+
+                // Combine both lists, ensuring no data is lost
+                paxPostCount = paxPostCount
+                    .Select(x =>
+                        historicalDict.TryGetValue(x.PaxName, out var y)
+                            ? new PaxData(x.PaxName, x.PostCount + y.PostCount, x.QCount + y.QCount, x.FirstPost < y.FirstPost ? x.FirstPost : y.FirstPost)
+                            : x) // If no match, keep x as is
+                    .Concat(historicalPaxPostCount.Where(y => !paxPostCount.Any(x => x.PaxName == y.PaxName))) // Add unmatched historical data
+                    .ToList();
+            }
+
+            // Add the region data to the sector data for each pax
+            foreach (var pax in paxPostCount)
+            {
+                // Find the pax in the sector data
+                var sectorPax = sectorData.FirstOrDefault(x => x.PaxName == pax.PaxName);
+
+                // If the pax doesn't exist, create it
+                if (sectorPax == null)
+                {
+                    sectorPax = new SectorData { PaxName = pax.PaxName, RegionData = new Dictionary<string, PaxData> { { region.Key.DisplayName, pax } } };
+                    sectorData.Add(sectorPax);
+                }
+                else
+                {
+                    // Add the region data to the pax
+                    sectorPax.RegionData.Add(region.Key.DisplayName, pax);
+                }
+
+                sectorPax.TotalPostCount += pax.PostCount;
+                sectorPax.TotalQCount += pax.QCount;
+                sectorPax.FirstPost = sectorPax.FirstPost == DateTime.MinValue ? pax.FirstPost : (pax.FirstPost < sectorPax.FirstPost ? pax.FirstPost : sectorPax.FirstPost);
+            }
+        }
+
+        sectorData = sectorData.OrderByDescending(x => x.TotalPostCount).ToList();
+        return sectorData;
     }
 
     private async Task<int> GetSheetRowCountAsync(SheetsService sheetsService, string spreadsheetId, string range)
