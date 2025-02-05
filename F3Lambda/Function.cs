@@ -714,7 +714,7 @@ public class Function
         foreach (var region in allRegionDataDict)
         {
             // Group by pax name
-            var paxPostCount = region.Value.Posts.GroupBy(x => x.Pax).Select(x => new PaxRegionData(x.Key, x.Count(), x.Count(y => y.IsQ), x.Min(x => x.Date))).ToList();
+            var paxPostCount = region.Value.Posts.GroupBy(x => x.Pax.Trim()).Select(x => new PaxRegionData(x.Key, x.Count(), x.Count(y => y.IsQ), x.Min(x => x.Date))).ToList();
 
             // Handle historical data
             if (region.Value.HistoricalData != null && region.Value.HistoricalData.Any())
