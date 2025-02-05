@@ -677,7 +677,7 @@ public class Function
         }
     }
 
-    private async Task<List<SectorData>> GetSectorDataAsync(SheetsService sheetsService)
+    private async Task<SectorData> GetSectorDataAsync(SheetsService sheetsService)
     {
         var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
 
@@ -702,18 +702,18 @@ public class Function
         );
 
         // Create the sector data
-        var sectorData = new List<SectorData>();
+        var paxSectorData = new List<PaxSectorData>();
 
         foreach (var region in allRegionDataDict)
         {
             // Group by pax name
-            var paxPostCount = region.Value.Posts.GroupBy(x => x.Pax).Select(x => new PaxData(x.Key, x.Count(), x.Count(y => y.IsQ), x.Min(x => x.Date))).ToList();
+            var paxPostCount = region.Value.Posts.GroupBy(x => x.Pax).Select(x => new PaxRegionData(x.Key, x.Count(), x.Count(y => y.IsQ), x.Min(x => x.Date))).ToList();
 
             // Handle historical data
             if (region.Value.HistoricalData != null && region.Value.HistoricalData.Any())
             {
                 // Group by pax name
-                var historicalPaxPostCount = region.Value.HistoricalData.GroupBy(x => x.PaxName).Select(x => new PaxData(x.Key, x.Sum(y => y.PostCount), x.Sum(y => y.QCount), x.Min(y => y.FirstPost.GetValueOrDefault()))).ToList();
+                var historicalPaxPostCount = region.Value.HistoricalData.GroupBy(x => x.PaxName).Select(x => new PaxRegionData(x.Key, x.Sum(y => y.PostCount), x.Sum(y => y.QCount), x.Min(y => y.FirstPost.GetValueOrDefault()))).ToList();
 
                 // Create a dictionary for quick lookups
                 var historicalDict = historicalPaxPostCount.ToDictionary(h => h.PaxName, h => h);
@@ -722,7 +722,7 @@ public class Function
                 paxPostCount = paxPostCount
                     .Select(x =>
                         historicalDict.TryGetValue(x.PaxName, out var y)
-                            ? new PaxData(x.PaxName, x.PostCount + y.PostCount, x.QCount + y.QCount, x.FirstPost < y.FirstPost ? x.FirstPost : y.FirstPost)
+                            ? new PaxRegionData(x.PaxName, x.PostCount + y.PostCount, x.QCount + y.QCount, x.FirstPost < y.FirstPost ? x.FirstPost : y.FirstPost)
                             : x) // If no match, keep x as is
                     .Concat(historicalPaxPostCount.Where(y => !paxPostCount.Any(x => x.PaxName == y.PaxName))) // Add unmatched historical data
                     .ToList();
@@ -732,28 +732,48 @@ public class Function
             foreach (var pax in paxPostCount)
             {
                 // Find the pax in the sector data
-                var sectorPax = sectorData.FirstOrDefault(x => x.PaxName == pax.PaxName);
+                var sectorPax = paxSectorData.FirstOrDefault(x => x.PaxName == pax.PaxName);
 
                 // If the pax doesn't exist, create it
                 if (sectorPax == null)
                 {
-                    sectorPax = new SectorData { PaxName = pax.PaxName, RegionData = new Dictionary<string, PaxData> { { region.Key.DisplayName, pax } } };
-                    sectorData.Add(sectorPax);
+                    sectorPax = new PaxSectorData { PaxName = pax.PaxName, PaxRegionData = new Dictionary<string, PaxRegionData> { { region.Key.DisplayName, pax } } };
+                    paxSectorData.Add(sectorPax);
                 }
                 else
                 {
                     // Add the region data to the pax
-                    sectorPax.RegionData.Add(region.Key.DisplayName, pax);
+                    sectorPax.PaxRegionData.Add(region.Key.DisplayName, pax);
                 }
 
                 sectorPax.TotalPostCount += pax.PostCount;
                 sectorPax.TotalQCount += pax.QCount;
                 sectorPax.FirstPost = sectorPax.FirstPost == DateTime.MinValue ? pax.FirstPost : (pax.FirstPost < sectorPax.FirstPost ? pax.FirstPost : sectorPax.FirstPost);
+
+                // Sort the region data by post count
+                sectorPax.PaxRegionData = sectorPax.PaxRegionData.OrderByDescending(x => x.Value.PostCount).ToDictionary(x => x.Key, x => x.Value);
             }
         }
 
-        sectorData = sectorData.OrderByDescending(x => x.TotalPostCount).ToList();
-        return sectorData;
+        paxSectorData = paxSectorData.OrderByDescending(x => x.TotalPostCount).ToList();
+
+        var allAos = allRegionDataDict.SelectMany(x => x.Value.Aos).Select(x => x.Name).ToList();
+
+        var rtn = new SectorData
+        {
+            PaxSectorData = paxSectorData,
+            TotalPosts = paxSectorData.Sum(x => x.TotalPostCount),
+            TotalPax = paxSectorData.Count,
+            ActiveLocations = allAos.Count()        ,
+            TotalPax30Days = allRegionDataDict
+                .SelectMany(x => x.Value.Posts)
+                .Where(y => y.Date >= DateTime.Now.AddDays(-30))
+                .Select(y => y.Pax)
+                .Distinct()
+                .Count(),
+        };
+
+        return rtn;
     }
 
     private async Task<int> GetSheetRowCountAsync(SheetsService sheetsService, string spreadsheetId, string range)
