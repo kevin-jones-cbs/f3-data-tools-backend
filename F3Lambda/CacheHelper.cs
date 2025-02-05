@@ -13,26 +13,28 @@ namespace F3Lambda.Data
         private static ICredentialProvider authProvider = new EnvMomentoTokenProvider("F3_MOMENTO_TOKEN");
         private static TimeSpan DEFAULT_TTL = TimeSpan.FromHours(24);
         private static string cacheName = "F3Data";
-        private static string GetCacheKey(Region region, CacheKeyType cacheKeyType)
+        private static string GetCacheKey(string prefix, CacheKeyType cacheKeyType)
         {
             switch (cacheKeyType)
             {
                 case CacheKeyType.AllData:
-                    return $"AllData_{region.DisplayName}";
+                    return $"AllData_{prefix}";
                 case CacheKeyType.Locations:
-                    return $"Locations_{region.DisplayName}";
+                    return $"Locations_{prefix}";
                 case CacheKeyType.Close100s:
-                    return $"Close100s_{region.DisplayName}";
+                    return $"Close100s_{prefix}";
                 case CacheKeyType.AllDataSummary:
-                    return $"AllDataSummary_{region.DisplayName}";
+                    return $"AllDataSummary_{prefix}";
+                case CacheKeyType.SectorData:
+                    return $"SectorData_{prefix}";
                 default:
                     return string.Empty;
             }
         }
 
-        public static async Task<T> GetCachedDataAsync<T>(Region region, CacheKeyType cacheKeyType)
+        public static async Task<T> GetCachedDataAsync<T>(string prefix, CacheKeyType cacheKeyType)
         {
-            var cacheKey = GetCacheKey(region, cacheKeyType);
+            var cacheKey = GetCacheKey(prefix, cacheKeyType);
 
             if (string.IsNullOrEmpty(cacheKey))
             {
@@ -65,9 +67,9 @@ namespace F3Lambda.Data
             }
         }
 
-        public static async Task SetCachedDataAsync(Region region, CacheKeyType cacheKeyType, string data)
+        public static async Task SetCachedDataAsync(string prefix, CacheKeyType cacheKeyType, string data)
         {
-            var cacheKey = GetCacheKey(region, cacheKeyType);
+            var cacheKey = GetCacheKey(prefix, cacheKeyType);
 
             if (string.IsNullOrEmpty(cacheKey))
             {
@@ -91,7 +93,7 @@ namespace F3Lambda.Data
                 // Delete each of the CacheKeyTypes
                 foreach (CacheKeyType cacheKeyType in Enum.GetValues(typeof(CacheKeyType)))
                 {
-                    await client.DeleteAsync(cacheName, GetCacheKey(region, cacheKeyType));
+                    await client.DeleteAsync(cacheName, GetCacheKey(region.DisplayName, cacheKeyType));
                 }
             }
         }

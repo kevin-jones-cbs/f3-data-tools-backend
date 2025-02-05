@@ -119,14 +119,14 @@ public class Function
             // Save to cache
             if (functionInput.Action == "SaveToCache")
             {
-                await CacheHelper.SetCachedDataAsync(region, functionInput.CacheKey, functionInput.CacheValue);
+                await CacheHelper.SetCachedDataAsync(region.DisplayName, functionInput.CacheKey, functionInput.CacheValue);
                 result = "Saved to Cache";
             }
 
             // Get from cache
             if (functionInput.Action == "GetFromCache")
             {
-                var cacheValue = await CacheHelper.GetCachedDataAsync<string>(region, functionInput.CacheKey);
+                var cacheValue = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, functionInput.CacheKey);
                 result = cacheValue;
                 if (result == null)
                 {
@@ -196,7 +196,7 @@ public class Function
         var notify100s = close100s;
 
         // If there are any, check the cache to see if we've already notified
-        var last100s = await CacheHelper.GetCachedDataAsync<List<Close100>>(region, CacheKeyType.Close100s);
+        var last100s = await CacheHelper.GetCachedDataAsync<List<Close100>>(region.DisplayName, CacheKeyType.Close100s);
 
         if (last100s != null)
         {
@@ -221,7 +221,7 @@ public class Function
 
         // Save to cache
         var serialized = JsonSerializer.Serialize(close100s);
-        await CacheHelper.SetCachedDataAsync(region, CacheKeyType.Close100s, serialized);
+        await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.Close100s, serialized);
     }
 
     private async Task<List<Pax>> GetPaxFromCommentAsync(SheetsService sheetsService, Region region, string comment)
@@ -254,7 +254,7 @@ public class Function
     private async Task<string> GetAllDataAsync(SheetsService sheetsService, Region region, bool compress = true)
     {
         var cacheKeyType = CacheKeyType.AllData;
-        var cachedData = await CacheHelper.GetCachedDataAsync<string>(region, cacheKeyType);
+        var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, cacheKeyType);
 
         if (cachedData != null && compress)
         {
@@ -373,7 +373,7 @@ public class Function
         var compressedJson = Compress(json);
 
         // Save to cache
-        await CacheHelper.SetCachedDataAsync(region, cacheKeyType, compressedJson);
+        await CacheHelper.SetCachedDataAsync(region.DisplayName, cacheKeyType, compressedJson);
 
         // Deserialize the json
         return compress ? compressedJson : json;
@@ -461,7 +461,7 @@ public class Function
     private async Task<List<Ao>> GetLocationsAsync(SheetsService sheetsService, Region region)
     {
         var cacheKeyType = CacheKeyType.Locations;
-        var cachedData = await CacheHelper.GetCachedDataAsync<List<Ao>>(region, cacheKeyType);
+        var cachedData = await CacheHelper.GetCachedDataAsync<List<Ao>>(region.DisplayName, cacheKeyType);
 
         if (cachedData != null)
         {
@@ -491,7 +491,7 @@ public class Function
 
         // Save to Cache
         var serialized = JsonSerializer.Serialize(aos);
-        await CacheHelper.SetCachedDataAsync(region, cacheKeyType, serialized);
+        await CacheHelper.SetCachedDataAsync(region.DisplayName, cacheKeyType, serialized);
 
         return aos;
     }
@@ -679,6 +679,13 @@ public class Function
 
     private async Task<SectorData> GetSectorDataAsync(SheetsService sheetsService)
     {
+        // Check cache
+        var cachedData = await CacheHelper.GetCachedDataAsync<SectorData>("SacSector", CacheKeyType.SectorData);
+        if (cachedData != null)
+        {
+            return cachedData;
+        }
+
         var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
 
         // Get the data for each region in parallel
@@ -772,6 +779,9 @@ public class Function
                 .Distinct()
                 .Count(),
         };
+
+        // Save to cache
+        await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, JsonSerializer.Serialize(rtn));
 
         return rtn;
     }
