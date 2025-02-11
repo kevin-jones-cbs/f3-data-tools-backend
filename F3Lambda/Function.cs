@@ -21,6 +21,8 @@ namespace F3Lambda;
 
 public class Function
 {
+    private static readonly List<string> PaxNameBlacklist = new List<string> { "(Archived)", "(<18)" };
+
     public async Task<object> FunctionHandler(APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
     {
         try
@@ -355,9 +357,9 @@ public class Function
             QSourcePosts = qSourcePosts
         };
 
-        // Exclude any "archived" pax
-        rtn.Pax = rtn.Pax.Where(x => !x.Name.Contains("(Archived)")).ToList();
-        rtn.Posts = rtn.Posts.Where(x => !x.Pax.Contains("(Archived)")).ToList();
+        // Exclude any pax that contain any of the blacklist words (PaxNameBlacklist) List<string>
+        rtn.Pax = rtn.Pax.Where(x => !PaxNameBlacklist.Any(y => x.Name.Contains(y))).ToList();
+        rtn.Posts = rtn.Posts.Where(x => !PaxNameBlacklist.Any(y => x.Pax.Contains(y))).ToList();
 
         // Json serialize the object as small in size as possible
         var options = new JsonSerializerOptions
@@ -453,7 +455,7 @@ public class Function
         var paxMembers = result.Values.Select(x => x.FirstOrDefault()?.ToString()).Where(x => x != null).Distinct().ToList();
 
         // Exclude any "archived" pax
-        paxMembers = paxMembers.Where(x => !x.Contains("(Archived)")).ToList();
+        paxMembers = paxMembers.Where(x => !PaxNameBlacklist.Any(y => x.Contains(y))).ToList();
 
         return paxMembers;
     }
