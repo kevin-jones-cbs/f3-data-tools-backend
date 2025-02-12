@@ -455,7 +455,7 @@ public class Function
         var paxMembers = result.Values.Select(x => x.FirstOrDefault()?.ToString()).Where(x => x != null).Distinct().ToList();
 
         // Exclude any "archived" pax
-        paxMembers = paxMembers.Where(x => !PaxNameBlacklist.Any(y => x.Contains(y))).ToList();
+        paxMembers = paxMembers.Where(x => !x.Contains("(Archived)")).ToList();
 
         return paxMembers;
     }
