@@ -589,8 +589,10 @@ public class Function
         // If there are any fngs, do another UpdateCellsRequest for the roster sheet
         if (pax.Any(x => x.IsFng))
         {
-            // Get the number of roster rows
-            var rosterCount = await GetSheetRowCountAsync(sheetsService, region.SpreadsheetId, $"{region.RosterSheetName}!A:A");
+            // Get the number of roster rows (look at thhe name column)
+            var regionNameColumn = region.RosterSheetColumns.IndexOf(RosterSheetColumn.PaxName);
+            var regionNameLetter = (char)(regionNameColumn + 65);
+            var rosterCount = await GetSheetRowCountAsync(sheetsService, region.SpreadsheetId, $"{region.RosterSheetName}!{regionNameLetter}:{regionNameLetter}");
 
             var updateFngCellsRequest = new UpdateCellsRequest
             {
