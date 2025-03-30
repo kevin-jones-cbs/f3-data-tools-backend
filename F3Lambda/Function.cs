@@ -143,6 +143,13 @@ public class Function
                 result = sectorData;
             }
 
+            // GetTerracottaChallenge
+            if (functionInput.Action == "GetTerracottaChallenge")
+            {
+                var terracottaChallenge = await GetTerracottaChallengeAsync(sheetsService);
+                result = terracottaChallenge;
+            }
+
             if (result == null)
             {
                 result = "Error, unknown action";
@@ -788,6 +795,33 @@ public class Function
         await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, JsonSerializer.Serialize(rtn));
 
         return rtn;
+    }
+
+    private async Task<List<TerracottaChallenge>> GetTerracottaChallengeAsync(SheetsService sheetsService)
+    {
+        try
+        {
+            var terracottaRegion = RegionList.GetRegion("Terracotta");
+
+            var sheetRange = "PAX Data!A2:O";
+            var sheetData = await sheetsService.Spreadsheets.Values.Get(terracottaRegion.SpreadsheetId, sheetRange).ExecuteAsync();
+
+            var challenges = sheetData.Values.Select(row => new TerracottaChallenge
+            {
+                PaxName = row.Count > 0 ? row[0]?.ToString() : string.Empty, // Column A
+                ColdPlunges = row.Count > 8 && int.TryParse(row[8]?.ToString(), out var coldPlunges) ? coldPlunges : 0, // Column I
+                Volunteers = row.Count > 9 && int.TryParse(row[9]?.ToString(), out var volunteers) ? volunteers : 0, // Column J
+                DownrangePosts = row.Count > 12 && int.TryParse(row[12]?.ToString(), out var downrangePosts) ? downrangePosts : 0, // Column M
+                RegionCount = row.Count > 14 && int.TryParse(row[14]?.ToString(), out var regionCount) ? regionCount : 0 // Column O
+            }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
+
+            return challenges;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetTerracottaChallengeAsync: {ex.Message}");
+            throw;
+        }
     }
 
     private async Task<int> GetSheetRowCountAsync(SheetsService sheetsService, string spreadsheetId, string range)
