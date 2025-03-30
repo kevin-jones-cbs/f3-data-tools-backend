@@ -801,7 +801,7 @@ public class Function
     {
         try
         {
-            var terracottaRegion = RegionList.GetRegion("Terracotta");
+            var terracottaRegion = RegionList.GetRegion("terracotta");
 
             var sheetRange = "PAX Data!A2:O";
             var sheetData = await sheetsService.Spreadsheets.Values.Get(terracottaRegion.SpreadsheetId, sheetRange).ExecuteAsync();
