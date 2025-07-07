@@ -326,7 +326,7 @@ public class Function
 
         }
 
-        var posts = masterDataSheet.Values.Select(x => new Post
+        var posts = masterDataSheet.Values.Where(x => DateTime.TryParse(x[region.MasterDataColumnIndicies.Date].ToString(), out var date)).Select(x => new Post
         {
             Date = DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()),
             Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
