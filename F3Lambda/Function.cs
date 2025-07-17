@@ -270,7 +270,7 @@ public class Function
             return cachedData;
         }
 
-        var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A2:Q").ExecuteAsync();
+        var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A2:R").ExecuteAsync();
 
         // If the region has historical data, get it
         List<HistoricalData> historicalData = null;
