@@ -332,7 +332,8 @@ public class Function
             Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
             Pax = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
             IsQ = x.Count > region.MasterDataColumnIndicies.Q ? x[region.MasterDataColumnIndicies.Q].ToString() == "1" : false,
-            IsFNG = x.Count > region.MasterDataColumnIndicies.Fng ? x[region.MasterDataColumnIndicies.Fng].ToString() == "1" : false
+            IsFNG = x.Count > region.MasterDataColumnIndicies.Fng ? x[region.MasterDataColumnIndicies.Fng].ToString() == "1" : false,
+            ExtraActivity = region.HasExtraActivity && x.Count > region.MasterDataColumnIndicies.ExtraActivity && x[region.MasterDataColumnIndicies.ExtraActivity].ToString() == "1"
         }).ToList();
 
         // Get the roster
@@ -592,6 +593,21 @@ public class Function
         }
 
         batchUpdateRequest.Requests.Add(new Request { UpdateCells = qUpdate });
+
+        if (region.HasExtraActivity)
+        {
+            var extraActivityUpdate = GetDefaultUpdateCellsRequest();
+            extraActivityUpdate.Start.ColumnIndex = region.MasterDataColumnIndicies.ExtraActivity;
+            foreach (var member in pax)
+            {
+                extraActivityUpdate.Rows.Add(new RowData
+                {
+                    Values = new List<CellData> { new CellData { UserEnteredValue = new ExtendedValue { NumberValue = member.ExtraActivity ? 1 : (double?)null } } }
+                });
+            }
+
+            batchUpdateRequest.Requests.Add(new Request { UpdateCells = extraActivityUpdate });
+        }
 
         // If there are any fngs, do another UpdateCellsRequest for the roster sheet
         if (pax.Any(x => x.IsFng))
