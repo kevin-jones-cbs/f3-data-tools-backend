@@ -413,11 +413,20 @@ public class Function
         try
         {
             var rtn = new List<Ao>();
-            var valueRange = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A{region.MissingDataRowOffset}:K").ExecuteAsync();
+            var valueRange = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A{region.MissingDataRowOffset}:Q").ExecuteAsync();
 
             var dateIndex = region.MasterDataColumnIndicies.Date;
             var aoIndex = region.MasterDataColumnIndicies.Location;
-            var qDates = valueRange.Values.Select(x => new { Dates = DateTime.Parse(x[dateIndex].ToString()), AoName = x[aoIndex].ToString() }).ToList();
+            var qSourcePostIndex = region.MasterDataColumnIndicies.QSourcePost;
+
+            // Get all posts with date, AO name, and post type
+            var allPosts = valueRange.Values.Select(x => new
+            {
+                Dates = DateTime.Parse(x[dateIndex].ToString()),
+                AoName = x[aoIndex].ToString(),
+                IsQSourcePost = region.HasQSourcePosts && x.Count > qSourcePostIndex && x[qSourcePostIndex]?.ToString() == "1"
+            }).ToList();
+
             var aoList = await GetLocationsAsync(sheetsService, region);
 
             // Foreach loop for the last 7 days
@@ -430,20 +439,41 @@ public class Function
                 var aos = aoList.Where(x => x.DayOfWeek == dayOfWeek).ToList();
                 foreach (var ao in aos)
                 {
-                    // Check if there is a post for the date and AO
-                    var postExists = qDates.Any(x => x.Dates.Date == date.Date && x.AoName == ao.Name);
-                    if (!postExists)
+                    // Check if there is a regular post for the date and AO
+                    var regularPostExists = allPosts.Any(x => x.Dates.Date == date.Date && x.AoName == ao.Name && !x.IsQSourcePost);
+                    if (!regularPostExists)
                     {
-                        // Add the missing post to the list
+                        // Add the missing regular post to the list
                         var missingAo = new Ao
                         {
                             Name = ao.Name,
                             City = ao.City,
                             DayOfWeek = ao.DayOfWeek,
-                            Date = date
+                            Date = date,
+                            HasQSource = false // This is for a regular post
                         };
 
                         rtn.Add(missingAo);
+                    }
+
+                    // If the AO has Q Source, check for missing Q Source posts
+                    if (ao.HasQSource)
+                    {
+                        var qSourcePostExists = allPosts.Any(x => x.Dates.Date == date.Date && x.AoName == ao.Name && x.IsQSourcePost);
+                        if (!qSourcePostExists)
+                        {
+                            // Add the missing Q Source post to the list
+                            var missingQSourceAo = new Ao
+                            {
+                                Name = ao.Name,
+                                City = ao.City,
+                                DayOfWeek = ao.DayOfWeek,
+                                Date = date,
+                                HasQSource = true // This is for a Q Source post
+                            };
+
+                            rtn.Add(missingQSourceAo);
+                        }
                     }
                 }
             }
