@@ -472,13 +472,12 @@ public class Function
     {
         var cacheKeyType = CacheKeyType.Locations;
         var cachedData = await CacheHelper.GetCachedDataAsync<List<Ao>>(region.DisplayName, cacheKeyType);
-
         if (cachedData != null)
         {
             return cachedData;
         }
 
-        var aoResult = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.AosSheetName}!A2:O").ExecuteAsync();
+        var aoResult = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.AosSheetName}!A2:S").ExecuteAsync();
         var aos = new List<Ao>();
 
         foreach (var row in aoResult.Values)
@@ -494,7 +493,10 @@ public class Function
                 {
                     Name = row[region.AoColumnIndicies.Name].ToString(),
                     City = row[region.AoColumnIndicies.City].ToString(),
-                    DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), row[region.AoColumnIndicies.DayOfWeek].ToString())
+                    DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), row[region.AoColumnIndicies.DayOfWeek].ToString()),
+                    HasQSource = region.AoColumnIndicies.HasQSource > 0 && 
+                                 row.Count > region.AoColumnIndicies.HasQSource && 
+                                 row[region.AoColumnIndicies.HasQSource]?.ToString()?.ToUpper() == "TRUE"
                 });
             }
         }
