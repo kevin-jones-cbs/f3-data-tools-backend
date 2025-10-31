@@ -27,6 +27,8 @@ namespace F3Lambda.Data
                     return $"AllDataSummary_{prefix}";
                 case CacheKeyType.SectorData:
                     return $"SectorData_{prefix}";
+                case CacheKeyType.AllTimeView:
+                    return $"AllTimeView_{prefix}";
                 default:
                     return string.Empty;
             }

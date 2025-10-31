@@ -150,6 +150,13 @@ public class Function
                 result = terracottaChallenge;
             }
 
+            // GetAllTimeView
+            if (functionInput.Action == "GetAllTimeView")
+            {
+                var allTimeView = await GetAllTimeViewAsync(sheetsService, region);
+                result = allTimeView;
+            }
+
             if (result == null)
             {
                 result = "Error, unknown action";
@@ -843,6 +850,82 @@ public class Function
         await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, JsonSerializer.Serialize(rtn));
 
         return rtn;
+    }
+
+    private async Task<string> GetAllTimeViewAsync(SheetsService sheetsService, Region region)
+    {
+        try
+        {
+            // Check cache first
+            var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, CacheKeyType.AllTimeView);
+            if (cachedData != null)
+            {
+                return cachedData;
+            }
+
+            // Get all the data needed for the AllTime view calculation
+            var allDataJson = await GetAllDataAsync(sheetsService, region, compress: false);
+            var options = new JsonSerializerOptions
+            {
+                IgnoreNullValues = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = false
+            };
+            
+            var allData = JsonSerializer.Deserialize<AllData>(allDataJson, options);
+
+            // Get all possible workout days
+            var allPossibleWorkoutDays = DataHelper.GetCurrentPossibleWorkoutDays(allData.Posts);
+
+            // Calculate AllTime view rows using DataHelper from Core
+            var currentRows = DataHelper.SetCurrentRows(
+                allData.Posts,
+                null, // firstDay = null for AllTime
+                DateTime.Now, // lastDay
+                true, // combineWithHistorical
+                allPossibleWorkoutDays,
+                region,
+                allData,
+                OverallView.AllTime,
+                GetCalDaysTo100
+            );
+
+            // Serialize the result
+            var serialized = JsonSerializer.Serialize(currentRows);
+
+            // Cache it
+            await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.AllTimeView, serialized);
+
+            return serialized;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetAllTimeViewAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    private int? GetCalDaysTo100(List<Post> selectedPaxPosts)
+    {
+        // Get the 100th post for the selected pax
+        var pax100thPost = selectedPaxPosts.OrderBy(x => x.Date).Skip(99).FirstOrDefault();
+        var notYet = false;
+        if (pax100thPost == null)
+        {
+            // No 100 yet, so just count today
+            pax100thPost = new Post() { Date = DateTime.Now };
+            notYet = true;
+        }
+
+        var paxFirstPost = selectedPaxPosts.OrderBy(x => x.Date).FirstOrDefault();
+        if (paxFirstPost == null)
+        {
+            return null;
+        }
+
+        var daysBetween = (pax100thPost.Date - paxFirstPost.Date).Days;
+
+        return notYet ? null : daysBetween;
     }
 
     private async Task<List<TerracottaChallenge>> GetTerracottaChallengeAsync(SheetsService sheetsService)
