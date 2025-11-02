@@ -150,11 +150,11 @@ public class Function
                 result = terracottaChallenge;
             }
 
-            // GetAllTimeView
-            if (functionInput.Action == "GetAllTimeView")
+            // GetInitialView
+            if (functionInput.Action == "GetInitialView")
             {
-                var allTimeView = await GetAllTimeViewAsync(sheetsService, region);
-                result = allTimeView;
+                var initialView = await GetInitialViewAsync(sheetsService, region);
+                result = initialView;
             }
 
             if (result == null)
@@ -852,12 +852,12 @@ public class Function
         return rtn;
     }
 
-    private async Task<string> GetAllTimeViewAsync(SheetsService sheetsService, Region region)
+    private async Task<string> GetInitialViewAsync(SheetsService sheetsService, Region region)
     {
         try
         {
             // Check cache first
-            var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, CacheKeyType.AllTimeView);
+            var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, CacheKeyType.InitialView);
             if (cachedData != null)
             {
                 return cachedData;
@@ -873,6 +873,13 @@ public class Function
             };
             
             var allData = JsonSerializer.Deserialize<AllData>(allDataJson, options);
+
+            // Legacy handling of the UPDATE post for last updated date
+            var lastUpdateItem = allData.Posts.FirstOrDefault(x => x.Site == "UPDATE");
+            if (lastUpdateItem != null)
+            {
+                allData.Posts.Remove(lastUpdateItem);
+            }
 
             // Get all possible workout days
             var allPossibleWorkoutDays = DataHelper.GetCurrentPossibleWorkoutDays(allData.Posts);
@@ -890,17 +897,50 @@ public class Function
                 GetCalDaysTo100
             );
 
+            // Calculate metadata for dropdowns and UI
+            var validYears = allData.Posts
+                .Select(p => p.Date.Year)
+                .Distinct()
+                .OrderByDescending(x => x)
+                .Where(x => x <= DateTime.Now.Year)
+                .ToList();
+
+            var validMonths = new List<string> { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec" };
+            validMonths = validMonths
+                .OrderByDescending(x => DateTime.ParseExact(x, "MMM", System.Globalization.CultureInfo.InvariantCulture).Month)
+                .ToList();
+
+            var lastUpdatedDate = allData.Posts
+                .Where(x => x.Date.Year <= DateTime.Now.AddYears(1).Year)
+                .Max(x => x.Date);
+
+            DateTime? firstNonHistoricalDate = null;
+            if (region.HasHistoricalData)
+            {
+                firstNonHistoricalDate = allData.Posts.Min(x => x.Date);
+            }
+
+            // Create the InitialViewData object
+            var initialViewData = new InitialViewData
+            {
+                CurrentRows = currentRows,
+                ValidYears = validYears,
+                ValidMonths = validMonths,
+                LastUpdatedDate = lastUpdatedDate,
+                FirstNonHistoricalDate = firstNonHistoricalDate
+            };
+
             // Serialize the result
-            var serialized = JsonSerializer.Serialize(currentRows);
+            var serialized = JsonSerializer.Serialize(initialViewData);
 
             // Cache it
-            await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.AllTimeView, serialized);
+            await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.InitialView, serialized);
 
             return serialized;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error in GetAllTimeViewAsync: {ex.Message}");
+            Console.WriteLine($"Error in GetInitialViewAsync: {ex.Message}");
             throw;
         }
     }
