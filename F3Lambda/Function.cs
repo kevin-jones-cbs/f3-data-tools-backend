@@ -137,6 +137,13 @@ public class Function
             }
 
             // GetSectorData
+            if (functionInput.Action == "GetSectorDataSummaryAsync")
+            {
+                var sectorData = await GetSectorDataSummaryAsync(sheetsService);
+                result = sectorData;
+            }
+
+            // GetSectorData
             if (functionInput.Action == "GetSectorData")
             {
                 var sectorData = await GetSectorDataAsync(sheetsService);
@@ -155,6 +162,13 @@ public class Function
             {
                 var initialView = await GetInitialViewAsync(sheetsService, region);
                 result = initialView;
+            }
+
+            // GetRegionSummary
+            if (functionInput.Action == "GetRegionSummary")
+            {
+                var regionSummary = await GetRegionSummaryAsync(sheetsService, region);
+                result = regionSummary;
             }
 
             if (result == null)
@@ -394,25 +408,6 @@ public class Function
 
         // Deserialize the json
         return compress ? compressedJson : json;
-
-        // Inline Functions
-        static string Compress(string plainText)
-        {
-            var buffer = Encoding.UTF8.GetBytes(plainText);
-            using var memoryStream = new MemoryStream();
-
-            var lengthBytes = BitConverter.GetBytes((int)buffer.Length);
-            memoryStream.Write(lengthBytes, 0, lengthBytes.Length);
-
-            using var gZipStream = new GZipStream(memoryStream, CompressionMode.Compress);
-
-            gZipStream.Write(buffer, 0, buffer.Length);
-            gZipStream.Flush();
-
-            var gZipBuffer = memoryStream.ToArray();
-
-            return Convert.ToBase64String(gZipBuffer);
-        }
     }
 
     private async Task<List<Ao>> GetMissingAosAsync(SheetsService sheetsService, Region region)
@@ -852,6 +847,108 @@ public class Function
         return rtn;
     }
 
+    private async Task<string> GetSectorDataSummaryAsync(SheetsService sheetsService)
+    {
+        // Check cache
+        var cachedData = await CacheHelper.GetCachedDataAsync<string>("SacSector", CacheKeyType.SectorData);
+        if (cachedData != null)
+        {
+            return cachedData;
+        }
+
+        var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
+
+        // Get the summary data for each region in parallel (much faster than full AllData)
+        var tasks = allRegions.Select(async region =>
+        {
+            var regionSummaryJson = await GetRegionSummaryAsync(sheetsService, region);
+            return (region, regionSummaryJson);
+        });
+
+        var allRegionData = await Task.WhenAll(tasks);
+
+        // Deserialize and store in a dictionary
+        var options = new JsonSerializerOptions
+        {
+            PropertyNameCaseInsensitive = true
+        };
+
+        var allRegionSummaryDict = allRegionData.ToDictionary(
+            result => result.region,
+            result => JsonSerializer.Deserialize<RegionSummaryData>(result.regionSummaryJson, options)
+        );
+
+        // Create the sector data
+        var paxSectorData = new List<PaxSectorData>();
+
+        foreach (var region in allRegionSummaryDict)
+        {
+            // Use the pre-aggregated PAX data from RegionSummaryData
+            var paxPostCount = region.Value.PaxData.Values.ToList();
+
+            // Add the region data to the sector data for each pax
+            foreach (var pax in paxPostCount)
+            {
+                // Find the pax in the sector data
+                var sectorPax = paxSectorData.FirstOrDefault(x => x.PaxName == pax.PaxName);
+
+                // If the pax doesn't exist, create it
+                if (sectorPax == null)
+                {
+                    sectorPax = new PaxSectorData { PaxName = pax.PaxName, PaxRegionData = new Dictionary<string, PaxRegionData> { { region.Key.DisplayName, pax } } };
+                    paxSectorData.Add(sectorPax);
+                }
+                else
+                {
+                    // Add the region data to the pax
+                    sectorPax.PaxRegionData.Add(region.Key.DisplayName, pax);
+                }
+
+                sectorPax.TotalPostCount += pax.PostCount;
+                sectorPax.TotalQCount += pax.QCount;
+                sectorPax.FirstPost = sectorPax.FirstPost == DateTime.MinValue ? pax.FirstPost : (pax.FirstPost < sectorPax.FirstPost ? pax.FirstPost : sectorPax.FirstPost);
+
+                // Sort the region data by post count
+                sectorPax.PaxRegionData = sectorPax.PaxRegionData.OrderByDescending(x => x.Value.PostCount).ToDictionary(x => x.Key, x => x.Value);
+            }
+        }
+
+        paxSectorData = paxSectorData.OrderByDescending(x => x.TotalPostCount).ToList();
+
+        // Sum the AO counts from each region
+        var totalAoCount = allRegionSummaryDict.Sum(x => x.Value.AoCount);
+
+        // Sum the recent unique PAX counts from each region (note: this may count same PAX twice if they posted in multiple regions)
+        var totalRecentPax = allRegionSummaryDict.Sum(x => x.Value.RecentUniquePaxCount);
+
+        var rtn = new SectorData
+        {
+            PaxSectorData = paxSectorData,
+            TotalPosts = paxSectorData.Sum(x => x.TotalPostCount),
+            TotalPax = paxSectorData.Count,
+            ActiveLocations = totalAoCount,
+            TotalPax30Days = totalRecentPax,
+        };
+
+        // Json serialize with size optimization
+        var jsonOptions = new JsonSerializerOptions
+        {
+            IgnoreNullValues = true,
+            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+            WriteIndented = false
+        };
+
+        var json = JsonSerializer.Serialize(rtn, jsonOptions);
+
+        // Compress the json
+        var compressedJson = Compress(json);
+
+        // Save to cache (compressed)
+        await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, compressedJson);
+
+        return compressedJson;
+    }
+
     private async Task<string> GetInitialViewAsync(SheetsService sheetsService, Region region)
     {
         try
@@ -941,6 +1038,111 @@ public class Function
         catch (Exception ex)
         {
             Console.WriteLine($"Error in GetInitialViewAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<string> GetRegionSummaryAsync(SheetsService sheetsService, Region region)
+    {
+        try
+        {
+            // Check cache first
+            var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, CacheKeyType.RegionSummary);
+            if (cachedData != null)
+            {
+                return cachedData;
+            }
+
+            // Get all the data needed for summary calculation
+            var allDataJson = await GetAllDataAsync(sheetsService, region, compress: false);
+            var options = new JsonSerializerOptions
+            {
+                IgnoreNullValues = true,
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = false
+            };
+
+            var allData = JsonSerializer.Deserialize<AllData>(allDataJson, options);
+
+            // Group by pax name to get aggregated counts
+            var paxData = allData.Posts
+                .GroupBy(x => x.Pax.Trim())
+                .Select(x => new
+                {
+                    PaxName = x.Key,
+                    Data = new PaxRegionData(
+                        x.Key,
+                        x.Count(),
+                        x.Count(y => y.IsQ),
+                        x.Min(p => p.Date)
+                    )
+                })
+                .ToDictionary(x => x.PaxName, x => x.Data);
+
+            // Handle historical data if it exists
+            if (allData.HistoricalData != null && allData.HistoricalData.Any())
+            {
+                var historicalPaxData = allData.HistoricalData
+                    .GroupBy(x => x.PaxName)
+                    .Select(x => new
+                    {
+                        PaxName = x.Key,
+                        Data = new PaxRegionData(
+                            x.Key,
+                            x.Sum(y => y.PostCount),
+                            x.Sum(y => y.QCount),
+                            x.Min(y => y.FirstPost.GetValueOrDefault())
+                        )
+                    })
+                    .ToDictionary(x => x.PaxName, x => x.Data);
+
+                // Combine current and historical data
+                foreach (var histPax in historicalPaxData)
+                {
+                    if (paxData.TryGetValue(histPax.Key, out var currentData))
+                    {
+                        // Combine: sum counts, take earlier first post date
+                        paxData[histPax.Key] = new PaxRegionData(
+                            histPax.Key,
+                            currentData.PostCount + histPax.Value.PostCount,
+                            currentData.QCount + histPax.Value.QCount,
+                            currentData.FirstPost < histPax.Value.FirstPost ? currentData.FirstPost : histPax.Value.FirstPost
+                        );
+                    }
+                    else
+                    {
+                        // Add historical data for PAX not in current data
+                        paxData[histPax.Key] = histPax.Value;
+                    }
+                }
+            }
+
+            // Calculate recent unique PAX count (last 30 days)
+            var recentUniquePaxCount = allData.Posts
+                .Where(x => x.Date >= DateTime.Now.AddDays(-30))
+                .Select(x => x.Pax.Trim())
+                .Distinct()
+                .Count();
+
+            // Create the RegionSummaryData object
+            var regionSummary = new RegionSummaryData
+            {
+                PaxData = paxData,
+                AoCount = allData.Aos?.Count ?? 0,
+                RecentUniquePaxCount = recentUniquePaxCount
+            };
+
+            // Serialize the result
+            var serialized = JsonSerializer.Serialize(regionSummary);
+
+            // Cache it
+            await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.RegionSummary, serialized);
+
+            return serialized;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetRegionSummaryAsync: {ex.Message}");
             throw;
         }
     }
@@ -1043,5 +1245,23 @@ public class Function
         });
 
         return sheetsService;
+    }
+
+    private static string Compress(string plainText)
+    {
+        var buffer = Encoding.UTF8.GetBytes(plainText);
+        using var memoryStream = new MemoryStream();
+
+        var lengthBytes = BitConverter.GetBytes((int)buffer.Length);
+        memoryStream.Write(lengthBytes, 0, lengthBytes.Length);
+
+        using var gZipStream = new GZipStream(memoryStream, CompressionMode.Compress);
+
+        gZipStream.Write(buffer, 0, buffer.Length);
+        gZipStream.Flush();
+
+        var gZipBuffer = memoryStream.ToArray();
+
+        return Convert.ToBase64String(gZipBuffer);
     }
 }

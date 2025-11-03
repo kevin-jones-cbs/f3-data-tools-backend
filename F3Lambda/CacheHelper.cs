@@ -29,6 +29,8 @@ namespace F3Lambda.Data
                     return $"SectorData_{prefix}";
                 case CacheKeyType.InitialView:
                     return $"InitialView_{prefix}";
+                case CacheKeyType.RegionSummary:
+                    return $"RegionSummary_{prefix}";
                 default:
                     return string.Empty;
             }
