@@ -291,7 +291,21 @@ public class Function
             return cachedData;
         }
 
-        var masterDataSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A2:R").ExecuteAsync();
+        // Load all master data sheets in parallel
+        var sheetTasks = region.MasterDataSheetNames
+            .Select(sheetName => sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{sheetName}!A2:R").ExecuteAsync())
+            .ToList();
+
+        var sheetResults = await Task.WhenAll(sheetTasks);
+
+        // Combine all sheet values into a single list (maintaining order: oldest sheets first, most recent last)
+        var masterDataSheet = new Google.Apis.Sheets.v4.Data.ValueRange
+        {
+            Values = sheetResults
+                .Where(s => s.Values != null)
+                .SelectMany(s => s.Values)
+                .ToList()
+        };
 
         // If the region has historical data, get it
         List<HistoricalData> historicalData = null;
@@ -415,7 +429,7 @@ public class Function
         try
         {
             var rtn = new List<Ao>();
-            var valueRange = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.MasterDataSheetName}!A{region.MissingDataRowOffset}:Q").ExecuteAsync();
+            var valueRange = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.CurrentMasterDataSheetName}!A{region.MissingDataRowOffset}:Q").ExecuteAsync();
 
             var dateIndex = region.MasterDataColumnIndicies.Date;
             var aoIndex = region.MasterDataColumnIndicies.Location;
@@ -547,8 +561,8 @@ public class Function
             Requests = new List<Request>()
         };
 
-        // Get the sheet to find out the row count
-        var masterDataCount = await GetSheetRowCountAsync(sheetsService, region.SpreadsheetId, $"{region.MasterDataSheetName}!A:A");
+        // Get the sheet to find out the row count (use the most recent sheet)
+        var masterDataCount = await GetSheetRowCountAsync(sheetsService, region.SpreadsheetId, $"{region.CurrentMasterDataSheetName}!A:A");
 
         // Date
         var dateUpdate = GetDefaultUpdateCellsRequest();
@@ -727,7 +741,7 @@ public class Function
             {
                 Start = new GridCoordinate
                 {
-                    SheetId = region.MasterDataSheetId,
+                    SheetId = region.CurrentMasterDataSheetId,
                     RowIndex = masterDataCount
                 },
                 Rows = new List<RowData>(),
