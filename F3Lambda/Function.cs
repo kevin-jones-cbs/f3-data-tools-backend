@@ -171,6 +171,13 @@ public class Function
                 result = regionSummary;
             }
 
+            // UpdatePaxEh
+            if (functionInput.Action == "UpdatePaxEh")
+            {
+                await UpdatePaxEhAsync(sheetsService, region, functionInput.PaxName, functionInput.EhdByPaxName);
+                result = "PAX EH Updated";
+            }
+
             if (result == null)
             {
                 result = "Error, unknown action";
@@ -372,17 +379,19 @@ public class Function
         }).ToList();
 
         // Get the roster
-        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A2:F").ExecuteAsync();
+        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!A2:G").ExecuteAsync();
 
         var paxNameIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.PaxName);
         var joinDateIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.JoinDate);
         var namingRegionNameIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionName) == -1 ? region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionYN) : region.RosterSheetColumns.IndexOf(RosterSheetColumn.NamingRegionName);
+        var ehByIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.EhBy);
 
         var pax = rosterSheet.Values.Select(x => new Pax
         {
             Name = paxNameIndex < x.Count ? x[paxNameIndex].ToString() : string.Empty,
             DateJoined = joinDateIndex < x.Count && x[joinDateIndex].ToString().Contains("/") ? DateTime.Parse(x[joinDateIndex].ToString()).ToShortDateString() : string.Empty,
-            NamingRegion = namingRegionNameIndex == -1 || namingRegionNameIndex >= x.Count ? string.Empty : x[namingRegionNameIndex]?.ToString() ?? string.Empty
+            NamingRegion = namingRegionNameIndex == -1 || namingRegionNameIndex >= x.Count ? string.Empty : x[namingRegionNameIndex]?.ToString() ?? string.Empty,
+            EhdByPaxName = ehByIndex == -1 || ehByIndex >= x.Count ? string.Empty : x[ehByIndex]?.ToString() ?? string.Empty
         }).ToList();
 
         // Clear out any roster items without names
@@ -710,6 +719,9 @@ public class Function
                         case RosterSheetColumn.NamingRegionYN:
                             rowData.Values.Add(new CellData { UserEnteredValue = new ExtendedValue { StringValue = member.IsDr ? "Y" : "N" } });
                             break;
+                        case RosterSheetColumn.EhBy:
+                            rowData.Values.Add(new CellData { UserEnteredValue = new ExtendedValue { StringValue = string.Empty } });
+                            break;
                     }
                 }
 
@@ -750,6 +762,53 @@ public class Function
 
             return updateCellsRequest;
         }
+    }
+
+    private async Task UpdatePaxEhAsync(SheetsService sheetsService, Region region, string paxName, string ehdByPaxName)
+    {
+        // Get the roster data to find the row for this PAX
+        var regionNameColumn = region.RosterSheetColumns.IndexOf(RosterSheetColumn.PaxName);
+        var regionNameLetter = (char)(regionNameColumn + 65);
+        var rosterSheet = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!{regionNameLetter}:{regionNameLetter}").ExecuteAsync();
+
+        // Find the row index for this PAX (add 2 because: 1 for 0-based to 1-based, 1 for header row)
+        var paxRowIndex = -1;
+        for (int i = 0; i < rosterSheet.Values.Count; i++)
+        {
+            if (rosterSheet.Values[i].Count > 0 && rosterSheet.Values[i][0].ToString() == paxName)
+            {
+                paxRowIndex = i + 1; // Add 1 for header row 
+                break;
+            }
+        }
+
+        if (paxRowIndex == -1)
+        {
+            throw new Exception($"PAX '{paxName}' not found in roster");
+        }
+
+        // Get the column index for EhBy
+        var ehByColumnIndex = region.RosterSheetColumns.IndexOf(RosterSheetColumn.EhBy);
+        if (ehByColumnIndex == -1)
+        {
+            throw new Exception("EhBy column not configured for this region");
+        }
+
+        var ehByColumnLetter = (char)(ehByColumnIndex + 65);
+
+        // Update the cell
+        var range = $"{region.RosterSheetName}!{ehByColumnLetter}{paxRowIndex}";
+        var valueRange = new ValueRange
+        {
+            Values = new List<IList<object>> { new List<object> { ehdByPaxName ?? string.Empty } }
+        };
+
+        var updateRequest = sheetsService.Spreadsheets.Values.Update(valueRange, region.SpreadsheetId, range);
+        updateRequest.ValueInputOption = SpreadsheetsResource.ValuesResource.UpdateRequest.ValueInputOptionEnum.USERENTERED;
+        await updateRequest.ExecuteAsync();
+
+        // Clear the cache
+        await CacheHelper.ClearAllCachedDataAsync(region);
     }
 
     private async Task<SectorData> GetSectorDataAsync(SheetsService sheetsService)
