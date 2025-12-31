@@ -157,6 +157,13 @@ public class Function
                 result = terracottaChallenge;
             }
 
+            // GetForgeChallenge
+            if (functionInput.Action == "GetForgeChallenge")
+            {
+                var forgeChallenge = await GetForgeChallengeAsync(sheetsService);
+                result = forgeChallenge;
+            }
+
             // GetInitialView
             if (functionInput.Action == "GetInitialView")
             {
@@ -1266,6 +1273,31 @@ public class Function
         catch (Exception ex)
         {
             Console.WriteLine($"Error in GetTerracottaChallengeAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<List<ForgeChallenge>> GetForgeChallengeAsync(SheetsService sheetsService)
+    {
+        try
+        {
+            var motherlodeRegion = RegionList.GetRegion("motherlode");
+
+            var sheetRange = "Forge Data!A2:C";
+            var sheetData = await sheetsService.Spreadsheets.Values.Get(motherlodeRegion.SpreadsheetId, sheetRange).ExecuteAsync();
+
+            var challenges = sheetData.Values.Select(row => new ForgeChallenge
+            {
+                PaxName = row.Count > 0 ? row[0]?.ToString() : string.Empty, // Column A (Column 1)
+                NumberOfFngs = row.Count > 1 && int.TryParse(row[1]?.ToString(), out var fngs) ? fngs : 0, // Column B (Column 2)
+                NumberOf5Ks = row.Count > 2 && int.TryParse(row[2]?.ToString(), out var fiveKs) ? fiveKs : 0 // Column C (Column 3)
+            }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
+
+            return challenges;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetForgeChallengeAsync: {ex.Message}");
             throw;
         }
     }
