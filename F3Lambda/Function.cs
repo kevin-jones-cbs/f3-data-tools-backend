@@ -164,6 +164,13 @@ public class Function
                 result = forgeChallenge;
             }
 
+            // GetTowerChallenge
+            if (functionInput.Action == "GetTowerChallenge")
+            {
+                var towerChallenge = await GetTowerChallengeAsync(sheetsService);
+                result = towerChallenge;
+            }
+
             // GetInitialView
             if (functionInput.Action == "GetInitialView")
             {
@@ -1298,6 +1305,30 @@ public class Function
         catch (Exception ex)
         {
             Console.WriteLine($"Error in GetForgeChallengeAsync: {ex.Message}");
+            throw;
+        }
+    }
+
+    private async Task<List<TowerChallenge>> GetTowerChallengeAsync(SheetsService sheetsService)
+    {
+        try
+        {
+            var sactownRegion = RegionList.GetRegion("sactown");
+
+            var sheetRange = "Tower Data!A2:B";
+            var sheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, sheetRange).ExecuteAsync();
+
+            var challenges = sheetData.Values.Select(row => new TowerChallenge
+            {
+                PaxName = row.Count > 0 ? row[0]?.ToString() : string.Empty, // Column A
+                FirstFEvents = row.Count > 1 && int.TryParse(row[1]?.ToString(), out var firstFEvents) ? firstFEvents : 0 // Column B
+            }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
+
+            return challenges;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error in GetTowerChallengeAsync: {ex.Message}");
             throw;
         }
     }
