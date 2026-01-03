@@ -479,20 +479,24 @@ public class Function
                 foreach (var ao in aos)
                 {
                     // Check if there is a regular post for the date and AO
-                    var regularPostExists = allPosts.Any(x => x.Dates.Date == date.Date && x.AoName == ao.Name && !x.IsQSourcePost);
-                    if (!regularPostExists)
+                    if (!ao.IsQSourceOnly)
                     {
-                        // Add the missing regular post to the list
-                        var missingAo = new Ao
+                        var regularPostExists = allPosts.Any(x => x.Dates.Date == date.Date && x.AoName == ao.Name && !x.IsQSourcePost);
+                        if (!regularPostExists)
                         {
-                            Name = ao.Name,
-                            City = ao.City,
-                            DayOfWeek = ao.DayOfWeek,
-                            Date = date,
-                            HasQSource = false // This is for a regular post
-                        };
+                            // Add the missing regular post to the list
+                            var missingAo = new Ao
+                            {
+                                Name = ao.Name,
+                                City = ao.City,
+                                DayOfWeek = ao.DayOfWeek,
+                                Date = date,
+                                HasQSource = false, // This is for a regular post
+                                IsQSourceOnly = ao.IsQSourceOnly
+                            };
 
-                        rtn.Add(missingAo);
+                            rtn.Add(missingAo);
+                        }
                     }
 
                     // If the AO has Q Source, check for missing Q Source posts
@@ -508,7 +512,8 @@ public class Function
                                 City = ao.City,
                                 DayOfWeek = ao.DayOfWeek,
                                 Date = date,
-                                HasQSource = true // This is for a Q Source post
+                                HasQSource = true, // This is for a Q Source post
+                                IsQSourceOnly = ao.IsQSourceOnly
                             };
 
                             rtn.Add(missingQSourceAo);
@@ -565,7 +570,10 @@ public class Function
                     DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), row[region.AoColumnIndicies.DayOfWeek].ToString()),
                     HasQSource = region.AoColumnIndicies.HasQSource > 0 && 
                                  row.Count > region.AoColumnIndicies.HasQSource && 
-                                 row[region.AoColumnIndicies.HasQSource]?.ToString()?.ToUpper() == "TRUE"
+                                 row[region.AoColumnIndicies.HasQSource]?.ToString()?.ToUpper() == "TRUE",
+                    IsQSourceOnly = region.AoColumnIndicies.IsQSourceOnly > 0 &&
+                                    row.Count > region.AoColumnIndicies.IsQSourceOnly &&
+                                    row[region.AoColumnIndicies.IsQSourceOnly]?.ToString()?.ToUpper() == "TRUE"
                 });
             }
         }
