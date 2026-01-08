@@ -1277,10 +1277,8 @@ public class Function
             var challenges = sheetData.Values.Select(row => new TerracottaChallenge
             {
                 PaxName = row.Count > 0 ? row[0]?.ToString() : string.Empty, // Column A
-                ColdPlunges = row.Count > 8 && int.TryParse(row[8]?.ToString(), out var coldPlunges) ? coldPlunges : 0, // Column I
                 Volunteers = row.Count > 9 && int.TryParse(row[9]?.ToString(), out var volunteers) ? volunteers : 0, // Column J
                 DownrangePosts = row.Count > 12 && int.TryParse(row[12]?.ToString(), out var downrangePosts) ? downrangePosts : 0, // Column M
-                RegionCount = row.Count > 14 && int.TryParse(row[14]?.ToString(), out var regionCount) ? regionCount : 0 // Column O
             }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
 
             return challenges;
