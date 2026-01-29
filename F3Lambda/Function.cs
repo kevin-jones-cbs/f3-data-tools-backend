@@ -51,6 +51,11 @@ public class Function
                 result = await OnboardingService.GetSheetTabsAsync(sheetsService, functionInput.SpreadsheetId);
             }
 
+            if (functionInput.Action == "GetSheetPreview")
+            {
+                result = await OnboardingService.GetSheetPreviewAsync(sheetsService, functionInput.SpreadsheetId, functionInput.SheetName);
+            }
+
             // If we already have a result from onboarding actions, return early
             if (result != null)
             {
