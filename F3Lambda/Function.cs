@@ -38,6 +38,25 @@ public class Function
                 result = "Awake 2";
             }
 
+            var sheetsService = GetSheetsService();
+
+            // Onboarding actions - these work with user-provided spreadsheet IDs, not region configs
+            if (functionInput.Action == "VerifySpreadsheetAccess")
+            {
+                result = await OnboardingService.VerifySpreadsheetAccessAsync(sheetsService, functionInput.SpreadsheetId);
+            }
+
+            if (functionInput.Action == "GetSheetTabs")
+            {
+                result = await OnboardingService.GetSheetTabsAsync(sheetsService, functionInput.SpreadsheetId);
+            }
+
+            // If we already have a result from onboarding actions, return early
+            if (result != null)
+            {
+                return result;
+            }
+
             // Get the region
             var region = RegionList.GetRegion(functionInput.Region);
 
@@ -45,8 +64,6 @@ public class Function
             {
                 result = "Error, no region specified";
             }
-
-            var sheetsService = GetSheetsService();
 
             // Get recent posts
             if (functionInput.Action == "GetMissingAos")
