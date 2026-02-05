@@ -34,7 +34,7 @@ namespace F3Lambda.Data
         public static List<Pax> GetPaxFromComment(string comment, List<string> allPax)
         {
             comment = comment.NewStringEscaped();
-            allPax = allPax.Distinct().Reverse().ToList();
+            allPax = allPax.Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().Reverse().ToList();
 
             // Pax dictionary where value is .StringEscaped
             var paxDictionary = allPax.ToDictionary(x => x, x => x.NewStringEscaped().Trim().Replace(" ", @"\s?").Replace("(GR))", "(GR)"));

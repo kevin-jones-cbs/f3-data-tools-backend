@@ -556,7 +556,7 @@ public class Function
     private async Task<List<string>> GetPaxNamesAsync(SheetsService sheetsService, Region region)
     {
         var result = await sheetsService.Spreadsheets.Values.Get(region.SpreadsheetId, $"{region.RosterSheetName}!{region.RosterNameColumn}:{region.RosterNameColumn}").ExecuteAsync();
-        var paxMembers = result.Values.Select(x => x.FirstOrDefault()?.ToString()).Where(x => x != null).Distinct().ToList();
+        var paxMembers = result.Values.Select(x => x.FirstOrDefault()?.ToString()).Where(x => !string.IsNullOrWhiteSpace(x)).Distinct().ToList();
 
         // Exclude any "archived" pax
         paxMembers = paxMembers.Where(x => !x.Contains("(Archived)")).ToList();
