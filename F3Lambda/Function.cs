@@ -582,7 +582,8 @@ public class Function
             if (row.Count < 1) break; 
 
             if (Enum.TryParse(row[region.AoColumnIndicies.DayOfWeek].ToString(), out DayOfWeek _) &&
-                (row.Count <= region.AoColumnIndicies.Retired ||
+                (region.AoColumnIndicies.Retired == 0 ||
+                row.Count <= region.AoColumnIndicies.Retired ||
                 row[region.AoColumnIndicies.Retired].ToString() == region.AosRetiredIndicator)) // Ensure it's not retired
             {
                 aos.Add(new Ao
