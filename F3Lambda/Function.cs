@@ -1338,22 +1338,40 @@ public class Function
         }
     }
 
-    private async Task<List<TowerChallenge>> GetTowerChallengeAsync(SheetsService sheetsService)
+    private async Task<TowerChallengeResponse> GetTowerChallengeAsync(SheetsService sheetsService)
     {
         try
         {
             var sactownRegion = RegionList.GetRegion("sactown");
 
-            var sheetRange = "Tower Data!A2:B";
-            var sheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, sheetRange).ExecuteAsync();
+            var towerDataRange = "Tower Data!A2:B";
+            var towerSheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, towerDataRange).ExecuteAsync();
+            var towerRows = towerSheetData.Values ?? new List<IList<object>>();
 
-            var challenges = sheetData.Values.Select(row => new TowerChallenge
+            var challengeData = towerRows.Select(row => new TowerChallenge
             {
-                PaxName = row.Count > 0 ? row[0]?.ToString() : string.Empty, // Column A
+                PaxName = row.Count > 0 ? row[0]?.ToString() ?? string.Empty : string.Empty, // Column A
                 FirstFEvents = row.Count > 1 && int.TryParse(row[1]?.ToString(), out var firstFEvents) ? firstFEvents : 0 // Column B
             }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
 
-            return challenges;
+            var sitesRange = $"{sactownRegion.AosSheetName}!A2:E";
+            var sitesSheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, sitesRange).ExecuteAsync();
+            var siteRows = sitesSheetData.Values ?? new List<IList<object>>();
+
+            var challengeSites = siteRows
+                .Where(row => row.Count > 4 &&
+                              !string.IsNullOrWhiteSpace(row[0]?.ToString()) &&
+                              string.Equals(row[4]?.ToString()?.Trim(), "Y", StringComparison.OrdinalIgnoreCase))
+                .Select(row => row[0]?.ToString()?.Trim() ?? string.Empty)
+                .Where(siteName => !string.IsNullOrWhiteSpace(siteName))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            return new TowerChallengeResponse
+            {
+                ChallengeData = challengeData,
+                ChallengeSites = challengeSites
+            };
         }
         catch (Exception ex)
         {
