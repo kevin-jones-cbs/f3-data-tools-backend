@@ -356,7 +356,7 @@ public class Function
         {
             historicalData = masterDataSheet.Values
             // Look for site named "Archive"
-            .Where(x => x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() == "Archive" : false)    
+            .Where(x => IsArchiveRow(x, region) && HasValidMasterDataDate(x, region))
             // Grab the name, post count, and Q count
             .Select(x => new HistoricalData
             {
@@ -388,6 +388,7 @@ public class Function
             // Get the Q Source posts
             qSourcePosts = masterDataSheet.Values
                 .Where(x => x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost].ToString() == "1")
+                .Where(x => HasValidMasterDataDate(x, region))
                 .Select(x => new Post
                 {
                     Date = DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()),
@@ -467,6 +468,18 @@ public class Function
 
         // Deserialize the json
         return compress ? compressedJson : json;
+    }
+
+    private static bool IsArchiveRow(IList<object> row, Region region)
+    {
+        return row.Count > region.MasterDataColumnIndicies.Location &&
+               row[region.MasterDataColumnIndicies.Location].ToString() == "Archive";
+    }
+
+    private static bool HasValidMasterDataDate(IList<object> row, Region region)
+    {
+        return row.Count > region.MasterDataColumnIndicies.Date &&
+               DateTime.TryParse(row[region.MasterDataColumnIndicies.Date].ToString(), out _);
     }
 
     private async Task<List<Ao>> GetMissingAosAsync(SheetsService sheetsService, Region region)
@@ -876,7 +889,10 @@ public class Function
             return cachedData;
         }
 
-        var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
+        var allRegions = RegionList.All
+            .Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase))
+            .Where(x => !x.DisplayName.Contains("emberwatch", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         // Get the data for each region in parallel
         var tasks = allRegions.Select(async region =>
@@ -985,7 +1001,10 @@ public class Function
             return cachedData;
         }
 
-        var allRegions = RegionList.All.Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase)).ToList();
+        var allRegions = RegionList.All
+            .Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase))
+            .Where(x => !x.DisplayName.Contains("emberwatch", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         // Get the summary data for each region in parallel (much faster than full AllData)
         var tasks = allRegions.Select(async region =>
