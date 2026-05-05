@@ -481,12 +481,17 @@ public class Function
             var qSourcePostIndex = region.MasterDataColumnIndicies.QSourcePost;
 
             // Get all posts with date, AO name, and post type
-            var allPosts = valueRange.Values.Select(x => new
-            {
-                Dates = DateTime.Parse(x[dateIndex].ToString()),
-                AoName = x[aoIndex].ToString(),
-                IsQSourcePost = region.HasQSourcePosts && x.Count > qSourcePostIndex && x[qSourcePostIndex]?.ToString() == "1"
-            }).ToList();
+            var allPosts = valueRange.Values
+                .Where(x => x.Count > dateIndex &&
+                            x.Count > aoIndex &&
+                            DateTime.TryParse(x[dateIndex]?.ToString(), out _) &&
+                            !string.IsNullOrWhiteSpace(x[aoIndex]?.ToString()))
+                .Select(x => new
+                {
+                    Dates = DateTime.Parse(x[dateIndex].ToString()),
+                    AoName = x[aoIndex].ToString(),
+                    IsQSourcePost = region.HasQSourcePosts && x.Count > qSourcePostIndex && x[qSourcePostIndex]?.ToString() == "1"
+                }).ToList();
 
             var aoList = await GetLocationsAsync(sheetsService, region);
 
