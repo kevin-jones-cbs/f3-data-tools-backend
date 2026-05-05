@@ -580,6 +580,12 @@ public class Function
         {
             // Found an empty row, we're done, as there is likely data below this we don't want
             if (row.Count < 1) break; 
+            if (row.Count <= region.AoColumnIndicies.Name ||
+                row.Count <= region.AoColumnIndicies.City ||
+                row.Count <= region.AoColumnIndicies.DayOfWeek)
+            {
+                continue;
+            }
 
             if (Enum.TryParse(row[region.AoColumnIndicies.DayOfWeek].ToString(), out DayOfWeek _) &&
                 (region.AoColumnIndicies.Retired == 0 ||
