@@ -1384,14 +1384,14 @@ public class Function
                 FirstFEvents = row.Count > 1 && int.TryParse(row[1]?.ToString(), out var firstFEvents) ? firstFEvents : 0 // Column B
             }).Where(x => !string.IsNullOrEmpty(x.PaxName)).ToList();
 
-            var sitesRange = $"{sactownRegion.AosSheetName}!A2:E";
+            var sitesRange = $"{sactownRegion.AosSheetName}!A2:F";
             var sitesSheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, sitesRange).ExecuteAsync();
             var siteRows = sitesSheetData.Values ?? new List<IList<object>>();
 
             var challengeSites = siteRows
-                .Where(row => row.Count > 4 &&
+                .Where(row => row.Count > 5 &&
                               !string.IsNullOrWhiteSpace(row[0]?.ToString()) &&
-                              string.Equals(row[4]?.ToString()?.Trim(), "Y", StringComparison.OrdinalIgnoreCase))
+                              string.Equals(row[5]?.ToString()?.Trim(), "Y", StringComparison.OrdinalIgnoreCase))
                 .Select(row => row[0]?.ToString()?.Trim() ?? string.Empty)
                 .Where(siteName => !string.IsNullOrWhiteSpace(siteName))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
