@@ -10,9 +10,23 @@ namespace F3Lambda.Data
 {
     public static class CacheHelper
     {
-        private static ICredentialProvider authProvider = new EnvMomentoTokenProvider("F3_MOMENTO_TOKEN");
-        private static TimeSpan DEFAULT_TTL = TimeSpan.FromHours(24);
-        private static string cacheName = "F3Data";
+        public const string SkipMomentoEnvironmentVariable = "F3_SKIP_MOMENTO";
+        private const string MomentoTokenEnvironmentVariable = "F3_MOMENTO_TOKEN";
+        private static readonly Lazy<ICredentialProvider> authProvider = new(() => new EnvMomentoTokenProvider(MomentoTokenEnvironmentVariable));
+        private static readonly TimeSpan DEFAULT_TTL = TimeSpan.FromHours(24);
+        private static readonly string cacheName = "F3Data";
+
+        public static bool ShouldSkipMomento =>
+            IsEnabled(Environment.GetEnvironmentVariable(SkipMomentoEnvironmentVariable));
+
+        private static bool IsEnabled(string? value)
+        {
+            return value != null &&
+                (value.Equals("1", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("true", StringComparison.OrdinalIgnoreCase) ||
+                value.Equals("yes", StringComparison.OrdinalIgnoreCase));
+        }
+
         private static string GetCacheKey(string prefix, CacheKeyType cacheKeyType)
         {
             switch (cacheKeyType)
@@ -38,6 +52,12 @@ namespace F3Lambda.Data
 
         public static async Task<T> GetCachedDataAsync<T>(string prefix, CacheKeyType cacheKeyType)
         {
+            if (ShouldSkipMomento)
+            {
+                Console.WriteLine("Momento cache skipped by environment setting.");
+                return default(T);
+            }
+
             var cacheKey = GetCacheKey(prefix, cacheKeyType);
 
             if (string.IsNullOrEmpty(cacheKey))
@@ -45,7 +65,7 @@ namespace F3Lambda.Data
                 throw new Exception("Invalid cache key type");
             }
 
-            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider, DEFAULT_TTL))
+            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider.Value, DEFAULT_TTL))
             {
                 CacheGetResponse getResponse = await client.GetAsync(cacheName, cacheKey);
 
@@ -73,6 +93,12 @@ namespace F3Lambda.Data
 
         public static async Task SetCachedDataAsync(string prefix, CacheKeyType cacheKeyType, string data)
         {
+            if (ShouldSkipMomento)
+            {
+                Console.WriteLine("Momento cache write skipped by environment setting.");
+                return;
+            }
+
             var cacheKey = GetCacheKey(prefix, cacheKeyType);
 
             if (string.IsNullOrEmpty(cacheKey))
@@ -80,7 +106,7 @@ namespace F3Lambda.Data
                 throw new Exception("Invalid cache key type");
             }
 
-            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider, DEFAULT_TTL))
+            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider.Value, DEFAULT_TTL))
             {
                 var setResponse = await client.SetAsync(cacheName, cacheKey, data);
                 if (setResponse is CacheSetResponse.Error setError)
@@ -92,7 +118,13 @@ namespace F3Lambda.Data
 
         public static async Task ClearAllCachedDataAsync(Region region)
         {
-            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider, DEFAULT_TTL))
+            if (ShouldSkipMomento)
+            {
+                Console.WriteLine("Momento cache clear skipped by environment setting.");
+                return;
+            }
+
+            using (SimpleCacheClient client = new SimpleCacheClient(Configurations.Laptop.Latest(), authProvider.Value, DEFAULT_TTL))
             {
                 // Delete each of the CacheKeyTypes
                 foreach (CacheKeyType cacheKeyType in Enum.GetValues(typeof(CacheKeyType)))

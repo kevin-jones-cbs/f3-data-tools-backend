@@ -22,6 +22,14 @@ namespace F3Lambda;
 public class Function
 {
     private static readonly List<string> PaxNameBlacklist = new List<string> { "(Archived)", "(<18)" };
+    private readonly IReadOnlyDictionary<string, LambdaActionHandler> _actionHandlers;
+
+    private delegate Task<object?> LambdaActionHandler(FunctionInput input, SheetsService sheetsService, Region? region);
+
+    public Function()
+    {
+        _actionHandlers = BuildActionHandlers();
+    }
 
     public async Task<object> FunctionHandler(APIGatewayHttpApiV2ProxyRequest request, ILambdaContext context)
     {
@@ -29,189 +37,32 @@ public class Function
         {
             // Deserialize the request body into a FunctionInput object
             var functionInput = System.Text.Json.JsonSerializer.Deserialize<FunctionInput>(request.Body);
-            object result = null;
-            Console.WriteLine("In Function Handler " + functionInput.Action + " " + request.Body);
-
-            // For Cold Starts
-            if (functionInput.Action == "Awake")
+            if (functionInput == null || string.IsNullOrWhiteSpace(functionInput.Action))
             {
-                result = "Awake 2";
+                return "Error, unknown action";
             }
+
+            object? result = null;
+            Console.WriteLine("In Function Handler " + functionInput.Action + " " + request.Body);
 
             var sheetsService = GetSheetsService();
 
-            // Onboarding actions - these work with user-provided spreadsheet IDs, not region configs
-            if (functionInput.Action == "VerifySpreadsheetAccess")
+            if (!_actionHandlers.TryGetValue(functionInput.Action, out var handler) ||
+                !LambdaActions.TryGetDefinition(functionInput.Action, out var actionDefinition))
             {
-                result = await OnboardingService.VerifySpreadsheetAccessAsync(sheetsService, functionInput.SpreadsheetId);
+                result = "Error, unknown action";
             }
-
-            if (functionInput.Action == "GetSheetTabs")
+            else
             {
-                result = await OnboardingService.GetSheetTabsAsync(sheetsService, functionInput.SpreadsheetId);
-            }
-
-            if (functionInput.Action == "GetSheetPreview")
-            {
-                result = await OnboardingService.GetSheetPreviewAsync(sheetsService, functionInput.SpreadsheetId, functionInput.SheetName);
-            }
-
-            // If we already have a result from onboarding actions, return early
-            if (result != null)
-            {
-                return result;
-            }
-
-            // Get the region
-            var region = RegionList.GetRegion(functionInput.Region);
-
-            if (region == null && functionInput.Action != "GetSectorData")
-            {
-                result = "Error, no region specified";
-            }
-
-            // Get recent posts
-            if (functionInput.Action == "GetMissingAos")
-            {
-                var recentPosts = await GetMissingAosAsync(sheetsService, region);
-                result = recentPosts;
-            }
-
-            // Get The Pax
-            if (functionInput.Action == "GetPax")
-            {
-                var paxNames = await GetPaxNamesAsync(sheetsService, region);
-                result = paxNames;
-            }
-
-            // Add Pax
-            if (functionInput.Action == "AddPax")
-            {
-                await AddPaxToSheetAsync(sheetsService, region, functionInput.Pax, functionInput.QDate, functionInput.AoName, functionInput.IsQSource);
-                result = "Pax Added";
-            }
-
-            // Get all posts
-            if (functionInput.Action == "GetAllPosts")
-            {
-                var allPosts = await GetAllDataAsync(sheetsService, region);
-                result = allPosts;
-            }
-
-            // GetPaxFromComment
-            if (functionInput.Action == "GetPaxFromComment")
-            {
-                var pax = await GetPaxFromCommentAsync(sheetsService, region, functionInput.Comment);
-                result = pax;
-            }
-
-            // CheckClose100s
-            if (functionInput.Action == "CheckClose100s")
-            {
-                await CheckClose100sAsync(sheetsService, region);
-                result = "Done";
-            }
-
-            // ClearCache
-            if (functionInput.Action == "ClearCache")
-            {
-                await CacheHelper.ClearAllCachedDataAsync(region);
-                result = "Cache Cleared";
-            }
-
-            // GetLocations
-            if (functionInput.Action == "GetLocations")
-            {
-                var locations = await GetLocationsAsync(sheetsService, region);
-                result = locations;
-            }
-
-            // GetJson
-            if (functionInput.Action == "GetJson")
-            {
-                var allData = await GetJson(sheetsService, region, functionInput.JsonRow);
-                result = allData;
-            }
-
-            // SaveJson
-            if (functionInput.Action == "SaveJson")
-            {
-                await SaveJson(sheetsService, region, functionInput.Json, functionInput.JsonRow);
-                result = "Json Saved";
-            }
-
-            // Save to cache
-            if (functionInput.Action == "SaveToCache")
-            {
-                await CacheHelper.SetCachedDataAsync(region.DisplayName, functionInput.CacheKey, functionInput.CacheValue);
-                result = "Saved to Cache";
-            }
-
-            // Get from cache
-            if (functionInput.Action == "GetFromCache")
-            {
-                var cacheValue = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, functionInput.CacheKey);
-                result = cacheValue;
-                if (result == null)
+                var region = RegionList.GetRegion(functionInput.Region);
+                if (actionDefinition.RequiresRegion && region == null)
                 {
-                    result = "Miss";
+                    result = "Error, no region specified";
                 }
-            }
-
-            // GetSectorData
-            if (functionInput.Action == "GetSectorDataSummaryAsync")
-            {
-                var sectorData = await GetSectorDataSummaryAsync(sheetsService);
-                result = sectorData;
-            }
-
-            // GetSectorData
-            if (functionInput.Action == "GetSectorData")
-            {
-                var sectorData = await GetSectorDataAsync(sheetsService);
-                result = sectorData;
-            }
-
-            // GetTerracottaChallenge
-            if (functionInput.Action == "GetTerracottaChallenge")
-            {
-                var terracottaChallenge = await GetTerracottaChallengeAsync(sheetsService);
-                result = terracottaChallenge;
-            }
-
-            // GetForgeChallenge
-            if (functionInput.Action == "GetForgeChallenge")
-            {
-                var forgeChallenge = await GetForgeChallengeAsync(sheetsService);
-                result = forgeChallenge;
-            }
-
-            // GetTowerChallenge
-            if (functionInput.Action == "GetTowerChallenge")
-            {
-                var towerChallenge = await GetTowerChallengeAsync(sheetsService);
-                result = towerChallenge;
-            }
-
-            // GetInitialView
-            if (functionInput.Action == "GetInitialView")
-            {
-                var initialView = await GetInitialViewAsync(sheetsService, region);
-                result = initialView;
-            }
-
-            // GetRegionSummary
-            if (functionInput.Action == "GetRegionSummary")
-            {
-                var regionSummary = await GetRegionSummaryAsync(sheetsService, region);
-                result = regionSummary;
-            }
-
-            // UpdatePaxEh
-            if (functionInput.Action == "UpdatePaxEh")
-            {
-                await UpdatePaxEhAsync(sheetsService, region, functionInput.PaxName, functionInput.EhdByPaxName);
-                result = "PAX EH Updated";
+                else
+                {
+                    result = await handler(functionInput, sheetsService, region);
+                }
             }
 
             if (result == null)
@@ -243,6 +94,83 @@ public class Function
                 Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
             };
         }
+    }
+
+    private IReadOnlyDictionary<string, LambdaActionHandler> BuildActionHandlers()
+    {
+        return new Dictionary<string, LambdaActionHandler>(StringComparer.Ordinal)
+        {
+            [LambdaActions.Awake] = (input, sheetsService, region) => Task.FromResult<object?>("Awake 2"),
+            [LambdaActions.VerifySpreadsheetAccess] = async (input, sheetsService, region) =>
+                await OnboardingService.VerifySpreadsheetAccessAsync(sheetsService, input.SpreadsheetId),
+            [LambdaActions.GetSheetTabs] = async (input, sheetsService, region) =>
+                await OnboardingService.GetSheetTabsAsync(sheetsService, input.SpreadsheetId),
+            [LambdaActions.GetSheetPreview] = async (input, sheetsService, region) =>
+                await OnboardingService.GetSheetPreviewAsync(sheetsService, input.SpreadsheetId, input.SheetName),
+            [LambdaActions.GetMissingAos] = async (input, sheetsService, region) =>
+                await GetMissingAosAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.GetPax] = async (input, sheetsService, region) =>
+                await GetPaxNamesAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.AddPax] = async (input, sheetsService, region) =>
+            {
+                await AddPaxToSheetAsync(sheetsService, RequireRegion(region), input.Pax, input.QDate, input.AoName, input.IsQSource);
+                return "Pax Added";
+            },
+            [LambdaActions.GetAllPosts] = async (input, sheetsService, region) =>
+                await GetAllDataAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.GetPaxFromComment] = async (input, sheetsService, region) =>
+                await GetPaxFromCommentAsync(sheetsService, RequireRegion(region), input.Comment),
+            [LambdaActions.CheckClose100s] = async (input, sheetsService, region) =>
+            {
+                await CheckClose100sAsync(sheetsService, RequireRegion(region));
+                return "Done";
+            },
+            [LambdaActions.ClearCache] = async (input, sheetsService, region) =>
+            {
+                await CacheHelper.ClearAllCachedDataAsync(RequireRegion(region));
+                return "Cache Cleared";
+            },
+            [LambdaActions.GetLocations] = async (input, sheetsService, region) =>
+                await GetLocationsAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.GetJson] = async (input, sheetsService, region) =>
+                await GetJson(sheetsService, RequireRegion(region), input.JsonRow),
+            [LambdaActions.SaveJson] = async (input, sheetsService, region) =>
+            {
+                await SaveJson(sheetsService, RequireRegion(region), input.Json, input.JsonRow);
+                return "Json Saved";
+            },
+            [LambdaActions.SaveToCache] = async (input, sheetsService, region) =>
+            {
+                await CacheHelper.SetCachedDataAsync(RequireRegion(region).DisplayName, input.CacheKey, input.CacheValue);
+                return "Saved to Cache";
+            },
+            [LambdaActions.GetFromCache] = async (input, sheetsService, region) =>
+                await CacheHelper.GetCachedDataAsync<string>(RequireRegion(region).DisplayName, input.CacheKey) ?? "Miss",
+            [LambdaActions.GetSectorDataSummaryAsync] = async (input, sheetsService, region) =>
+                await GetSectorDataSummaryAsync(sheetsService),
+            [LambdaActions.GetSectorData] = async (input, sheetsService, region) =>
+                await GetSectorDataAsync(sheetsService),
+            [LambdaActions.GetTerracottaChallenge] = async (input, sheetsService, region) =>
+                await GetTerracottaChallengeAsync(sheetsService),
+            [LambdaActions.GetForgeChallenge] = async (input, sheetsService, region) =>
+                await GetForgeChallengeAsync(sheetsService),
+            [LambdaActions.GetTowerChallenge] = async (input, sheetsService, region) =>
+                await GetTowerChallengeAsync(sheetsService),
+            [LambdaActions.GetInitialView] = async (input, sheetsService, region) =>
+                await GetInitialViewAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.GetRegionSummary] = async (input, sheetsService, region) =>
+                await GetRegionSummaryAsync(sheetsService, RequireRegion(region)),
+            [LambdaActions.UpdatePaxEh] = async (input, sheetsService, region) =>
+            {
+                await UpdatePaxEhAsync(sheetsService, RequireRegion(region), input.PaxName, input.EhdByPaxName);
+                return "PAX EH Updated";
+            }
+        };
+    }
+
+    private static Region RequireRegion(Region? region)
+    {
+        return region ?? throw new InvalidOperationException("Action requires a valid region.");
     }
 
     private async Task CheckClose100sAsync(SheetsService sheetsService, Region region)
