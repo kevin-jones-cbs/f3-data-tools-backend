@@ -19,10 +19,10 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v2
 
-    - name: Setup .NET Core
-      uses: actions/setup-dotnet@v3
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
       with:
-        dotnet-version: '8.0.x'
+        dotnet-version: '10.0.x'
 
     - name: Install dotnet Lambda Tools
       run: |
@@ -37,3 +37,4 @@ jobs:
       working-directory: ${{env.WORKING_DIR}}
       run: |
         aws lambda update-function-code --function-name ${{env.LAMBDA_NAME}} --zip-file fileb://publish.zip
+        aws lambda wait function-updated --function-name ${{env.LAMBDA_NAME}}

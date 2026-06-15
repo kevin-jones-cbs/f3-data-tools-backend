@@ -5,7 +5,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: F3Lambda::F3Lambda.Function::FunctionHandler  
-      Runtime: dotnet6 
+      Runtime: dotnet10 
       CodeUri: . 
       MemorySize: 128
       Timeout: 100
