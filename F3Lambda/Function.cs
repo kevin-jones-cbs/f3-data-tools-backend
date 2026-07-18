@@ -22,12 +22,14 @@ namespace F3Lambda;
 public class Function
 {
     private static readonly List<string> PaxNameBlacklist = new List<string> { "(Archived)", "(<18)" };
+    private readonly IRegionProvider _regionProvider;
     private readonly IReadOnlyDictionary<string, LambdaActionHandler> _actionHandlers;
 
     private delegate Task<object?> LambdaActionHandler(FunctionInput input, SheetsService sheetsService, Region? region);
 
     public Function()
     {
+        _regionProvider = new S3RegionConfigProvider();
         _actionHandlers = BuildActionHandlers();
     }
 
@@ -54,7 +56,7 @@ public class Function
             }
             else
             {
-                var region = RegionList.GetRegion(functionInput.Region);
+                var region = await _regionProvider.GetRegionAsync(functionInput.Region);
                 if (actionDefinition.RequiresRegion && region == null)
                 {
                     result = "Error, no region specified";
@@ -107,6 +109,8 @@ public class Function
                 await OnboardingService.GetSheetTabsAsync(sheetsService, input.SpreadsheetId),
             [LambdaActions.GetSheetPreview] = async (input, sheetsService, region) =>
                 await OnboardingService.GetSheetPreviewAsync(sheetsService, input.SpreadsheetId, input.SheetName),
+            [LambdaActions.GetRegions] = async (input, sheetsService, region) =>
+                await GetRegionsAsync(),
             [LambdaActions.GetMissingAos] = async (input, sheetsService, region) =>
                 await GetMissingAosAsync(sheetsService, RequireRegion(region)),
             [LambdaActions.GetPax] = async (input, sheetsService, region) =>
@@ -171,6 +175,16 @@ public class Function
     private static Region RequireRegion(Region? region)
     {
         return region ?? throw new InvalidOperationException("Action requires a valid region.");
+    }
+
+    private async Task<List<RegionMetadata>> GetRegionsAsync()
+    {
+        var regions = await _regionProvider.GetRegionsAsync();
+        return regions
+            .Where(region => region.IsActive)
+            .Select(RegionMetadata.FromRegion)
+            .OrderBy(region => region.DisplayName)
+            .ToList();
     }
 
     private async Task CheckClose100sAsync(SheetsService sheetsService, Region region)
@@ -688,7 +702,8 @@ public class Function
                 var namingRegion = region.DisplayName;
                 if (member.IsDr)
                 {
-                    namingRegion = RegionList.AllRegionValues.First(x => x.Key == member.NamingRegionIndex).Value;
+                    var namingRegions = await _regionProvider.GetDownrangeNamingRegionsAsync();
+                    namingRegion = namingRegions.First(x => x.Index == member.NamingRegionIndex).DisplayName;
                 }
 
                 var rowData = new RowData();
@@ -817,9 +832,8 @@ public class Function
             return cachedData;
         }
 
-        var allRegions = RegionList.All
-            .Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase))
-            .Where(x => !x.DisplayName.Contains("emberwatch", StringComparison.OrdinalIgnoreCase))
+        var allRegions = (await _regionProvider.GetRegionsAsync())
+            .Where(x => x.IncludeInSector)
             .ToList();
 
         // Get the data for each region in parallel
@@ -929,9 +943,8 @@ public class Function
             return cachedData;
         }
 
-        var allRegions = RegionList.All
-            .Where(x => !x.DisplayName.Contains("fia", StringComparison.OrdinalIgnoreCase))
-            .Where(x => !x.DisplayName.Contains("emberwatch", StringComparison.OrdinalIgnoreCase))
+        var allRegions = (await _regionProvider.GetRegionsAsync())
+            .Where(x => x.IncludeInSector)
             .ToList();
 
         // Get the summary data for each region in parallel (much faster than full AllData)

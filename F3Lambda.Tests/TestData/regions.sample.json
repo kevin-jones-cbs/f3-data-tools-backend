@@ -1,0 +1,88 @@
+{
+  "configVersion": "2026-07-05T00:00:00Z",
+  "regions": [
+    {
+      "queryStringValue": "southfork",
+      "displayName": "South Fork",
+      "spreadsheetId": "1Wc58fAiGF7HxcM5Od0g7h-g3-no6XvzTNld68j-kfWw",
+      "masterDataSheetIds": [49879406, 729344821],
+      "masterDataSheetNames": ["Master Data 21-22", "Master Data"],
+      "missingDataRowOffset": 24000,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 15,
+        "qSourceQ": 16,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": ["Formula", "PaxName", "JoinDate", "Empty", "NamingRegionName", "EhBy"],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 14,
+        "hasQSource": 18,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": true,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "asgard",
+      "displayName": "Asgard",
+      "spreadsheetId": "1lMvACqxqatH-lyJg2DrAhePFAgzPX-uErNvhaG9j0d4",
+      "masterDataSheetIds": [729344821],
+      "masterDataSheetNames": ["Master Data"],
+      "missingDataRowOffset": 2400,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 15,
+        "qSourceQ": 16,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": ["Formula", "PaxName", "JoinDate", "Empty", "NamingRegionName"],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 13,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    }
+  ],
+  "downrangeNamingRegions": [
+    { "index": 1, "displayName": "Asgard" },
+    { "index": 5, "displayName": "South Fork" },
+    { "index": 14, "displayName": "Other" }
+  ]
+}

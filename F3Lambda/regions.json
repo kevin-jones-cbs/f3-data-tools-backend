@@ -1,0 +1,838 @@
+{
+  "configVersion": "2026-07-18T19:30:06Z",
+  "regions": [
+    {
+      "queryStringValue": "southfork",
+      "displayName": "South Fork",
+      "spreadsheetId": "1Wc58fAiGF7HxcM5Od0g7h-g3-no6XvzTNld68j-kfWw",
+      "masterDataSheetIds": [
+        49879406,
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data 21-22",
+        "Master Data"
+      ],
+      "missingDataRowOffset": 24000,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 15,
+        "qSourceQ": 16,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName",
+        "EhBy"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 14,
+        "hasQSource": 18,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": true,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "asgard",
+      "displayName": "Asgard",
+      "spreadsheetId": "1lMvACqxqatH-lyJg2DrAhePFAgzPX-uErNvhaG9j0d4",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2400,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 15,
+        "qSourceQ": 16,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 13,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "delta",
+      "displayName": "Delta",
+      "spreadsheetId": "1oZq5tsxR7xV_tBdUF0DfgkjKgEH2dYd1dwk0m8XMA1Y",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 15000,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "Empty",
+        "JoinDate",
+        "Formula",
+        "NamingRegionYN"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 7,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "rubicon",
+      "displayName": "Rubicon",
+      "spreadsheetId": "13iHs_ljdejKaV4UTmCO4v2yAuFxMFvytIvdvXUs7R2c",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 14000,
+      "masterDataColumnIndicies": {
+        "date": 5,
+        "location": 1,
+        "paxName": 0,
+        "fng": 2,
+        "post": 3,
+        "q": 4,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 11,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "goldrush",
+      "displayName": "Gold Rush",
+      "spreadsheetId": "1wBReydkjLGnxdRkmL8cknbvDWL7gH2K25LVmAq-J0iE",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 16000,
+      "masterDataColumnIndicies": {
+        "date": 7,
+        "location": 1,
+        "paxName": 0,
+        "fng": 2,
+        "post": 3,
+        "q": 4,
+        "qSourcePost": 5,
+        "qSourceQ": 6,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 11,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": true,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "sactown",
+      "displayName": "SacTown",
+      "spreadsheetId": "1_R4F0syR4m7eBen4j92PJCFeGrxEvNrbrL7LxFG46So",
+      "masterDataSheetIds": [
+        0
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 0,
+        "location": 1,
+        "paxName": 2,
+        "fng": 3,
+        "post": 4,
+        "q": 5,
+        "qSourcePost": 6,
+        "qSourceQ": 7,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 52995101,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 5,
+        "hasQSource": 3,
+        "isQSourceOnly": 4
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "motherlode",
+      "displayName": "Mother Lode",
+      "spreadsheetId": "11gcmSoqcKgDrSr5_gS-37SIOEQfLbGanvLpCC-n-A7w",
+      "masterDataSheetIds": [
+        0
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 15,
+        "qSourceQ": 16,
+        "extraActivity": 17
+      },
+      "rosterSheetId": 1860109286,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 14,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": true,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "terracotta",
+      "displayName": "Terracotta",
+      "spreadsheetId": "1Deezoc78u8nzCbyggyhw3EI4fBVTnkdM8ZOgwtOU_kU",
+      "masterDataSheetIds": [
+        127246721
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 15000,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 5,
+        "paxName": 6,
+        "fng": 7,
+        "post": 8,
+        "q": 9,
+        "qSourcePost": 10,
+        "qSourceQ": 11,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 1868968928,
+      "rosterSheetName": "PAX Data",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 11,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "Closed",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "junction",
+      "displayName": "Junction",
+      "spreadsheetId": "1eANvPBlBW4II5dItXa7gtjZQf0FszOdPwHILmg1HyC8",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 7,
+        "location": 1,
+        "paxName": 0,
+        "fng": 2,
+        "post": 3,
+        "q": 4,
+        "qSourcePost": 5,
+        "qSourceQ": 6,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 12,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "Active",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "bedrock",
+      "displayName": "Bedrock",
+      "spreadsheetId": "11fIBnwzcVU2F-OZu7zECq8xROJC6hMY4MryHR4KbUj0",
+      "masterDataSheetIds": [
+        729344821
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 7,
+        "location": 1,
+        "paxName": 0,
+        "fng": 2,
+        "post": 3,
+        "q": 4,
+        "qSourcePost": 5,
+        "qSourceQ": 6,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 437240319,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 12,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "Y",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "drycreek",
+      "displayName": "DryCreek",
+      "spreadsheetId": "1wgRKUm2xsTFnfon_1sMXF78tb5cr93RPovFgUOiaqwY",
+      "masterDataSheetIds": [
+        0
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 0,
+        "location": 6,
+        "paxName": 7,
+        "fng": 8,
+        "post": 9,
+        "q": 10,
+        "qSourcePost": 11,
+        "qSourceQ": 12,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 794841232,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 8,
+        "hasQSource": 6,
+        "isQSourceOnly": 7
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": true,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "emberwatch",
+      "displayName": "Emberwatch",
+      "spreadsheetId": "1PN2ZPOmE2KekGR-heYi7iVvXeH1DDSFfZeO3Ct213R8",
+      "masterDataSheetIds": [
+        135712858
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 0,
+        "location": 6,
+        "paxName": 7,
+        "fng": 8,
+        "post": 9,
+        "q": 10,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 0,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 6,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": false,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "plumaslake",
+      "displayName": "Plumas Lake",
+      "spreadsheetId": "1SV67kPW8jk_Ws4W_DPvGJ2_yiPvCncbAayhoCXwGYMs",
+      "masterDataSheetIds": [
+        919559676
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 1637644768,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 1,
+        "city": 3,
+        "dayOfWeek": 2,
+        "retired": 12,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "redlands",
+      "displayName": "Redlands",
+      "spreadsheetId": "1gs9Q9I18shVLwOdONg3lj06FcHthUYTwYYtRA9zghos",
+      "masterDataSheetIds": [
+        135712858
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 0,
+        "location": 6,
+        "paxName": 7,
+        "fng": 8,
+        "post": 9,
+        "q": 10,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 0,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 6,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": true,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "fiasouthfork",
+      "displayName": "FiA South Fork",
+      "spreadsheetId": "1GwwtHY1AW-h5c-PSQ1uX-YIvU1HFSZ-ksS7TstQR-yc",
+      "masterDataSheetIds": [
+        511807761
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 4500,
+      "masterDataColumnIndicies": {
+        "date": 1,
+        "location": 10,
+        "paxName": 11,
+        "fng": 12,
+        "post": 13,
+        "q": 14,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 92100026,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "B",
+      "rosterSheetColumns": [
+        "Formula",
+        "PaxName",
+        "JoinDate",
+        "Empty",
+        "Empty"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 11,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": false,
+      "isActive": true
+    },
+    {
+      "queryStringValue": "fiasactown",
+      "displayName": "FiA SacTown",
+      "spreadsheetId": "1PuKNvGWbvgq1PE7RyECcGTsYcV-pv5Umz-a4g7SM_yQ",
+      "masterDataSheetIds": [
+        0
+      ],
+      "masterDataSheetNames": [
+        "Master Data"
+      ],
+      "missingDataRowOffset": 2,
+      "masterDataColumnIndicies": {
+        "date": 0,
+        "location": 6,
+        "paxName": 7,
+        "fng": 8,
+        "post": 9,
+        "q": 10,
+        "qSourcePost": 0,
+        "qSourceQ": 0,
+        "extraActivity": 0
+      },
+      "rosterSheetId": 1800255987,
+      "rosterSheetName": "Roster",
+      "rosterNameColumn": "A",
+      "rosterSheetColumns": [
+        "PaxName",
+        "JoinDate",
+        "NamingRegionName"
+      ],
+      "aosSheetName": "Sites",
+      "aoColumnIndicies": {
+        "name": 0,
+        "city": 2,
+        "dayOfWeek": 1,
+        "retired": 6,
+        "hasQSource": 0,
+        "isQSourceOnly": 0
+      },
+      "aosRetiredIndicator": "",
+      "supportsDownrange": false,
+      "hasHistoricalData": false,
+      "hasQSourcePosts": false,
+      "hasExtraActivity": false,
+      "includeInSector": false,
+      "isActive": true
+    }
+  ],
+  "downrangeNamingRegions": [
+    {
+      "index": 1,
+      "displayName": "Asgard"
+    },
+    {
+      "index": 2,
+      "displayName": "Delta"
+    },
+    {
+      "index": 3,
+      "displayName": "Gold Rush"
+    },
+    {
+      "index": 4,
+      "displayName": "Rubicon"
+    },
+    {
+      "index": 5,
+      "displayName": "South Fork"
+    },
+    {
+      "index": 6,
+      "displayName": "Terracotta"
+    },
+    {
+      "index": 7,
+      "displayName": "SacTown"
+    },
+    {
+      "index": 8,
+      "displayName": "Mother Lode"
+    },
+    {
+      "index": 9,
+      "displayName": "Junction"
+    },
+    {
+      "index": 10,
+      "displayName": "Bedrock"
+    },
+    {
+      "index": 11,
+      "displayName": "DryCreek"
+    },
+    {
+      "index": 12,
+      "displayName": "Emberwatch"
+    },
+    {
+      "index": 13,
+      "displayName": "Plumas Lake"
+    },
+    {
+      "index": 14,
+      "displayName": "Other"
+    }
+  ]
+}

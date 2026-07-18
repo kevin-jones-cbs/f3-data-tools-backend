@@ -9,6 +9,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "F3Lambda.Tests", "F3Lambda.
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "F3Lambda.SmokeTests", "F3Lambda.SmokeTests\F3Lambda.SmokeTests.csproj", "{9717C610-5D81-49DD-9814-C6732E75F780}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "F3Lambda.LocalApi", "F3Lambda.LocalApi\F3Lambda.LocalApi.csproj", "{05E85C9B-B15D-42F1-878B-1DE42D24162B}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{9717C610-5D81-49DD-9814-C6732E75F780}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9717C610-5D81-49DD-9814-C6732E75F780}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9717C610-5D81-49DD-9814-C6732E75F780}.Release|Any CPU.Build.0 = Release|Any CPU
+		{05E85C9B-B15D-42F1-878B-1DE42D24162B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{05E85C9B-B15D-42F1-878B-1DE42D24162B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{05E85C9B-B15D-42F1-878B-1DE42D24162B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{05E85C9B-B15D-42F1-878B-1DE42D24162B}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
