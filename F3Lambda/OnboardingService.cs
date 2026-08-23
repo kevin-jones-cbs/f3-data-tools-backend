@@ -1,5 +1,6 @@
 using Google.Apis.Sheets.v4;
 using Google.Apis.Sheets.v4.Data;
+using F3Core;
 
 namespace F3Lambda;
 
@@ -98,6 +99,86 @@ public static class OnboardingService
         }
     }
 
+    public static async Task<SpreadsheetInspectionResult> InspectSpreadsheetAsync(
+        SheetsService sheetsService,
+        string spreadsheetId)
+    {
+        if (string.IsNullOrWhiteSpace(spreadsheetId))
+            throw new ArgumentException("SpreadsheetId is required");
+
+        var request = sheetsService.Spreadsheets.Get(spreadsheetId);
+        request.Fields = "properties.title,sheets.properties(sheetId,title,index,gridProperties(rowCount,columnCount))";
+        var spreadsheet = await request.ExecuteAsync();
+        return new SpreadsheetInspectionResult
+        {
+            SpreadsheetId = spreadsheetId,
+            SpreadsheetTitle = spreadsheet.Properties.Title,
+            ServiceAccountCanAccess = true,
+            Tabs = spreadsheet.Sheets
+                .Select((sheet, index) => new SheetTabDescriptor
+                {
+                    SheetId = sheet.Properties.SheetId ?? 0,
+                    Title = sheet.Properties.Title,
+                    Index = sheet.Properties.Index ?? index,
+                    RowCount = sheet.Properties.GridProperties?.RowCount ?? 0,
+                    ColumnCount = sheet.Properties.GridProperties?.ColumnCount ?? 0
+                })
+                .OrderBy(x => x.Index)
+                .ToList()
+        };
+    }
+
+    public static async Task<SheetSchemaPreviewResult> GetSheetSchemaPreviewAsync(
+        SheetsService sheetsService,
+        string spreadsheetId,
+        int? sheetId,
+        string sheetName,
+        int startRow = 1,
+        int maxRows = 10,
+        int? maxColumns = null)
+    {
+        var inspection = await InspectSpreadsheetAsync(sheetsService, spreadsheetId);
+        var tab = sheetId.HasValue
+            ? inspection.Tabs.FirstOrDefault(x => x.SheetId == sheetId.Value)
+            : inspection.Tabs.FirstOrDefault(x => string.Equals(x.Title, sheetName, StringComparison.Ordinal));
+        if (tab == null)
+            throw new KeyNotFoundException("The selected sheet tab no longer exists.");
+
+        var columnCount = Math.Min(tab.ColumnCount, maxColumns ?? tab.ColumnCount);
+        var endRow = startRow + maxRows;
+        var endColumn = GetColumnLetter(Math.Max(0, columnCount - 1));
+        var escapedTitle = tab.Title.Replace("'", "''");
+        var range = $"'{escapedTitle}'!A{startRow}:{endColumn}{endRow}";
+        var values = (await sheetsService.Spreadsheets.Values.Get(spreadsheetId, range).ExecuteAsync()).Values
+            ?? new List<IList<object>>();
+        var header = values.FirstOrDefault() ?? new List<object>();
+        var rows = values.Skip(1)
+            .Select(row => Enumerable.Range(0, columnCount)
+                .Select(index => index < row.Count ? row[index]?.ToString() ?? string.Empty : string.Empty)
+                .ToList())
+            .ToList();
+
+        return new SheetSchemaPreviewResult
+        {
+            SheetId = tab.SheetId,
+            SheetName = tab.Title,
+            Rows = rows,
+            Columns = Enumerable.Range(0, columnCount)
+                .Select(index => new SheetColumnDescriptor
+                {
+                    Index = index,
+                    Letter = GetColumnLetter(index),
+                    Header = index < header.Count ? header[index]?.ToString() ?? string.Empty : string.Empty,
+                    Samples = rows.Select(row => row[index])
+                        .Where(value => !string.IsNullOrWhiteSpace(value))
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .Take(3)
+                        .ToList()
+                })
+                .ToList()
+        };
+    }
+
     /// <summary>
     /// Get a preview of data from a specific sheet (first few rows).
     /// </summary>
@@ -172,7 +253,7 @@ public static class OnboardingService
     /// <summary>
     /// Convert a 0-based column index to a column letter (A, B, ... Z, AA, AB, ...)
     /// </summary>
-    private static string GetColumnLetter(int index)
+    public static string GetColumnLetter(int index)
     {
         var result = "";
         while (index >= 0)
@@ -181,6 +262,18 @@ public static class OnboardingService
             index = index / 26 - 1;
         }
         return result;
+    }
+
+    public static int GetColumnIndex(string? letter)
+    {
+        if (string.IsNullOrWhiteSpace(letter)) return -1;
+        var result = 0;
+        foreach (var character in letter.Trim().ToUpperInvariant())
+        {
+            if (character < 'A' || character > 'Z') return -1;
+            result = checked(result * 26 + character - 'A' + 1);
+        }
+        return result - 1;
     }
 }
 

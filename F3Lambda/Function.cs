@@ -23,13 +23,16 @@ public class Function
 {
     private static readonly List<string> PaxNameBlacklist = new List<string> { "(Archived)", "(<18)" };
     private readonly IRegionProvider _regionProvider;
+    private readonly RegionConfigEditorService _regionConfigEditor;
     private readonly IReadOnlyDictionary<string, LambdaActionHandler> _actionHandlers;
 
     private delegate Task<object?> LambdaActionHandler(FunctionInput input, SheetsService sheetsService, Region? region);
 
     public Function()
     {
-        _regionProvider = new S3RegionConfigProvider();
+        var configStore = RegionConfigStoreFactory.Create();
+        _regionProvider = new S3RegionConfigProvider(configStore);
+        _regionConfigEditor = new RegionConfigEditorService(configStore);
         _actionHandlers = BuildActionHandlers();
     }
 
@@ -45,7 +48,8 @@ public class Function
             }
 
             object? result = null;
-            Console.WriteLine("In Function Handler " + functionInput.Action + " " + request.Body);
+            // Request bodies can contain short-lived Google credentials. Never log them.
+            Console.WriteLine($"In Function Handler action={functionInput.Action} region={functionInput.Region}");
 
             var sheetsService = GetSheetsService();
 
@@ -85,32 +89,68 @@ public class Function
             return result;
 
         }
+        catch (RegionConfigConflictException ex)
+        {
+            return ErrorResponse(409, ex.Message);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return ErrorResponse(401, ex.Message);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return ErrorResponse(404, ex.Message);
+        }
+        catch (ArgumentException ex)
+        {
+            return ErrorResponse(400, ex.Message);
+        }
         catch (System.Exception ex)
         {
             Console.WriteLine(ex.Message);
             Console.WriteLine(ex.InnerException?.Message ?? string.Empty);
-            return new APIGatewayProxyResponse
-            {
-                StatusCode = 500,
-                Body = JsonSerializer.Serialize("Error" + ex.Message),
-                Headers = new Dictionary<string, string> { { "Content-Type", "text/plain" } }
-            };
+            return ErrorResponse(500, ex.Message);
         }
     }
+
+    private static APIGatewayProxyResponse ErrorResponse(int statusCode, string message) => new()
+    {
+        StatusCode = statusCode,
+        Body = JsonSerializer.Serialize(message),
+        Headers = new Dictionary<string, string> { { "Content-Type", "application/json" } }
+    };
 
     private IReadOnlyDictionary<string, LambdaActionHandler> BuildActionHandlers()
     {
         return new Dictionary<string, LambdaActionHandler>(StringComparer.Ordinal)
         {
             [LambdaActions.Awake] = (input, sheetsService, region) => Task.FromResult<object?>("Awake 2"),
-            [LambdaActions.VerifySpreadsheetAccess] = async (input, sheetsService, region) =>
-                await OnboardingService.VerifySpreadsheetAccessAsync(sheetsService, input.SpreadsheetId),
-            [LambdaActions.GetSheetTabs] = async (input, sheetsService, region) =>
-                await OnboardingService.GetSheetTabsAsync(sheetsService, input.SpreadsheetId),
-            [LambdaActions.GetSheetPreview] = async (input, sheetsService, region) =>
-                await OnboardingService.GetSheetPreviewAsync(sheetsService, input.SpreadsheetId, input.SheetName),
+            [LambdaActions.VerifySpreadsheetAccess] = (input, sheetsService, region) =>
+                throw new UnauthorizedAccessException("Use the permission-gated region editor spreadsheet actions."),
+            [LambdaActions.GetSheetTabs] = (input, sheetsService, region) =>
+                throw new UnauthorizedAccessException("Use the permission-gated region editor spreadsheet actions."),
+            [LambdaActions.GetSheetPreview] = (input, sheetsService, region) =>
+                throw new UnauthorizedAccessException("Use the permission-gated region editor spreadsheet actions."),
             [LambdaActions.GetRegions] = async (input, sheetsService, region) =>
                 await GetRegionsAsync(),
+            [LambdaActions.GetDownrangeNamingRegions] = async (input, sheetsService, region) =>
+                await _regionProvider.GetDownrangeNamingRegionsAsync(),
+            [LambdaActions.BeginRegionConfigEdit] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.BeginAsync(RequireEditorRequest(input).OriginalRegion),
+            [LambdaActions.GetRegionsForConfigEdit] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.GetRegionIdentitiesAsync(),
+            [LambdaActions.CompleteRegionEditAuthorization] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.CompleteAuthorizationAsync(RequireEditorRequest(input)),
+            [LambdaActions.InspectSpreadsheet] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.InspectAsync(RequireEditorRequest(input), sheetsService),
+            [LambdaActions.GetSheetSchemaPreview] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.PreviewAsync(RequireEditorRequest(input), sheetsService),
+            [LambdaActions.ValidateRegionConfig] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.ValidateAsync(RequireEditorRequest(input), sheetsService),
+            [LambdaActions.SaveRegionConfig] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.SaveAsync(RequireEditorRequest(input), sheetsService),
+            [LambdaActions.GetRegionConfigLiveVersion] = async (input, sheetsService, region) =>
+                await _regionConfigEditor.GetLiveVersionAsync(RequireEditorRequest(input)),
             [LambdaActions.GetMissingAos] = async (input, sheetsService, region) =>
                 await GetMissingAosAsync(sheetsService, RequireRegion(region)),
             [LambdaActions.GetPax] = async (input, sheetsService, region) =>
@@ -176,6 +216,9 @@ public class Function
     {
         return region ?? throw new InvalidOperationException("Action requires a valid region.");
     }
+
+    private static RegionConfigEditorRequest RequireEditorRequest(FunctionInput input) =>
+        input.RegionConfigEditor ?? throw new ArgumentException("RegionConfigEditor request is required.");
 
     private async Task<List<RegionMetadata>> GetRegionsAsync()
     {
@@ -327,21 +370,25 @@ public class Function
         List<Post> qSourcePosts = null;
         if (region.HasQSourcePosts)
         {
+            var qSourcePostColumn = region.MasterDataColumnIndicies.QSourcePost
+                ?? throw new InvalidOperationException("Q Source post column is not configured.");
+            var qSourceQColumn = region.MasterDataColumnIndicies.QSourceQ
+                ?? throw new InvalidOperationException("Q Source Q column is not configured.");
             // Get the Q Source posts
             qSourcePosts = masterDataSheet.Values
-                .Where(x => x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost].ToString() == "1")
+                .Where(x => x.Count > qSourcePostColumn && x[qSourcePostColumn].ToString() == "1")
                 .Where(x => HasValidMasterDataDate(x, region))
                 .Select(x => new Post
                 {
                     Date = DateTime.Parse(x[region.MasterDataColumnIndicies.Date].ToString()),
                     Site = x.Count > region.MasterDataColumnIndicies.Location ? x[region.MasterDataColumnIndicies.Location].ToString() : string.Empty,
                     Pax = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
-                    IsQ = x.Count > region.MasterDataColumnIndicies.QSourceQ ? x[region.MasterDataColumnIndicies.QSourceQ].ToString() == "1" : false,
+                    IsQ = x.Count > qSourceQColumn ? x[qSourceQColumn].ToString() == "1" : false,
                 }).ToList();
 
             // Remove the q source posts from the master data (unless it's attached to a normal post)
             masterDataSheet.Values = masterDataSheet.Values
-                .Where(x => !(x.Count > region.MasterDataColumnIndicies.QSourcePost && x[region.MasterDataColumnIndicies.QSourcePost]?.ToString() == "1") ||
+                .Where(x => !(x.Count > qSourcePostColumn && x[qSourcePostColumn]?.ToString() == "1") ||
                              (x.Count > region.MasterDataColumnIndicies.Post && x[region.MasterDataColumnIndicies.Post]?.ToString() == "1"))
                 .ToList();
 
@@ -354,7 +401,9 @@ public class Function
             Pax = x.Count > region.MasterDataColumnIndicies.PaxName ? x[region.MasterDataColumnIndicies.PaxName].ToString() : string.Empty,
             IsQ = x.Count > region.MasterDataColumnIndicies.Q ? x[region.MasterDataColumnIndicies.Q].ToString() == "1" : false,
             IsFNG = x.Count > region.MasterDataColumnIndicies.Fng ? x[region.MasterDataColumnIndicies.Fng].ToString() == "1" : false,
-            ExtraActivity = region.HasExtraActivity && x.Count > region.MasterDataColumnIndicies.ExtraActivity && x[region.MasterDataColumnIndicies.ExtraActivity].ToString() == "1"
+            ExtraActivity = region.HasExtraActivity &&
+                region.MasterDataColumnIndicies.ExtraActivity is short extraActivityColumn &&
+                x.Count > extraActivityColumn && x[extraActivityColumn].ToString() == "1"
         }).ToList();
 
         // Get the roster
@@ -433,7 +482,7 @@ public class Function
 
             var dateIndex = region.MasterDataColumnIndicies.Date;
             var aoIndex = region.MasterDataColumnIndicies.Location;
-            var qSourcePostIndex = region.MasterDataColumnIndicies.QSourcePost;
+            var qSourcePostIndex = region.MasterDataColumnIndicies.QSourcePost ?? -1;
 
             // Get all posts with date, AO name, and post type
             var allPosts = valueRange.Values
@@ -548,21 +597,21 @@ public class Function
             }
 
             if (Enum.TryParse(row[region.AoColumnIndicies.DayOfWeek].ToString(), out DayOfWeek _) &&
-                (region.AoColumnIndicies.Retired == 0 ||
-                row.Count <= region.AoColumnIndicies.Retired ||
-                row[region.AoColumnIndicies.Retired].ToString() == region.AosRetiredIndicator)) // Ensure it's not retired
+                (region.AoColumnIndicies.Retired is null ||
+                row.Count <= region.AoColumnIndicies.Retired.Value ||
+                row[region.AoColumnIndicies.Retired.Value].ToString() == region.AosRetiredIndicator)) // Ensure it's not retired
             {
                 aos.Add(new Ao
                 {
                     Name = row[region.AoColumnIndicies.Name].ToString(),
                     City = row[region.AoColumnIndicies.City].ToString(),
                     DayOfWeek = (DayOfWeek)Enum.Parse(typeof(DayOfWeek), row[region.AoColumnIndicies.DayOfWeek].ToString()),
-                    HasQSource = region.AoColumnIndicies.HasQSource > 0 && 
-                                 row.Count > region.AoColumnIndicies.HasQSource && 
-                                 row[region.AoColumnIndicies.HasQSource]?.ToString()?.ToUpper() == "TRUE",
-                    IsQSourceOnly = region.AoColumnIndicies.IsQSourceOnly > 0 &&
-                                    row.Count > region.AoColumnIndicies.IsQSourceOnly &&
-                                    row[region.AoColumnIndicies.IsQSourceOnly]?.ToString()?.ToUpper() == "TRUE"
+                    HasQSource = region.AoColumnIndicies.HasQSource is short hasQSourceColumn &&
+                                 row.Count > hasQSourceColumn &&
+                                 row[hasQSourceColumn]?.ToString()?.ToUpper() == "TRUE",
+                    IsQSourceOnly = region.AoColumnIndicies.IsQSourceOnly is short qSourceOnlyColumn &&
+                                    row.Count > qSourceOnlyColumn &&
+                                    row[qSourceOnlyColumn]?.ToString()?.ToUpper() == "TRUE"
                 });
             }
         }
@@ -638,7 +687,9 @@ public class Function
 
         // Post Column
         var postUpdate = GetDefaultUpdateCellsRequest();
-        postUpdate.Start.ColumnIndex = isQSource ? region.MasterDataColumnIndicies.QSourcePost : region.MasterDataColumnIndicies.Post;
+        postUpdate.Start.ColumnIndex = isQSource
+            ? region.MasterDataColumnIndicies.QSourcePost ?? throw new InvalidOperationException("Q Source post column is not configured.")
+            : region.MasterDataColumnIndicies.Post;
         foreach (var member in pax)
         {
             postUpdate.Rows.Add(new RowData
@@ -651,7 +702,9 @@ public class Function
 
         // Q Column
         var qUpdate = GetDefaultUpdateCellsRequest();
-        qUpdate.Start.ColumnIndex = isQSource ? region.MasterDataColumnIndicies.QSourceQ : region.MasterDataColumnIndicies.Q;
+        qUpdate.Start.ColumnIndex = isQSource
+            ? region.MasterDataColumnIndicies.QSourceQ ?? throw new InvalidOperationException("Q Source Q column is not configured.")
+            : region.MasterDataColumnIndicies.Q;
         foreach (var member in pax)
         {
             qUpdate.Rows.Add(new RowData
@@ -665,7 +718,8 @@ public class Function
         if (region.HasExtraActivity)
         {
             var extraActivityUpdate = GetDefaultUpdateCellsRequest();
-            extraActivityUpdate.Start.ColumnIndex = region.MasterDataColumnIndicies.ExtraActivity;
+            extraActivityUpdate.Start.ColumnIndex = region.MasterDataColumnIndicies.ExtraActivity
+                ?? throw new InvalidOperationException("Extra activity column is not configured.");
             foreach (var member in pax)
             {
                 extraActivityUpdate.Rows.Add(new RowData
@@ -1263,7 +1317,7 @@ public class Function
     {
         try
         {
-            var terracottaRegion = RegionList.GetRegion("terracotta");
+            var terracottaRegion = RequireRegion(await _regionProvider.GetRegionAsync("terracotta"));
 
             var sheetRange = "PAX Data!A2:O";
             var sheetData = await sheetsService.Spreadsheets.Values.Get(terracottaRegion.SpreadsheetId, sheetRange).ExecuteAsync();
@@ -1288,7 +1342,7 @@ public class Function
     {
         try
         {
-            var motherlodeRegion = RegionList.GetRegion("motherlode");
+            var motherlodeRegion = RequireRegion(await _regionProvider.GetRegionAsync("motherlode"));
 
             var sheetRange = "Forge Data!A2:C";
             var sheetData = await sheetsService.Spreadsheets.Values.Get(motherlodeRegion.SpreadsheetId, sheetRange).ExecuteAsync();
@@ -1313,7 +1367,7 @@ public class Function
     {
         try
         {
-            var sactownRegion = RegionList.GetRegion("sactown");
+            var sactownRegion = RequireRegion(await _regionProvider.GetRegionAsync("sactown"));
 
             var towerDataRange = "Tower Data!A2:B";
             var towerSheetData = await sheetsService.Spreadsheets.Values.Get(sactownRegion.SpreadsheetId, towerDataRange).ExecuteAsync();

@@ -1,8 +1,6 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using Amazon.S3;
-using Amazon.S3.Model;
 using F3Core.Regions;
+using System.Runtime.CompilerServices;
 
 namespace F3Lambda;
 
@@ -19,27 +17,21 @@ public class S3RegionConfigProvider : IRegionProvider
     private static string? cachedCatalogSource;
     private static DateTime cacheExpiresUtc = DateTime.MinValue;
 
-    private readonly string? bucketName;
-    private readonly string objectKey;
-    private readonly string? filePath;
-    private readonly bool disableS3;
-    private readonly IAmazonS3 s3Client;
+    private readonly IRegionConfigStore? configStore;
 
     public S3RegionConfigProvider()
-        : this(new AmazonS3Client())
+        : this(RegionConfigStoreFactory.Create())
     {
     }
 
     public S3RegionConfigProvider(IAmazonS3 s3Client)
+        : this(RegionConfigStoreFactory.Create(s3Client))
     {
-        this.s3Client = s3Client;
-        filePath = Environment.GetEnvironmentVariable(FileEnvironmentVariable);
-        bucketName = Environment.GetEnvironmentVariable(BucketEnvironmentVariable);
-        objectKey = Environment.GetEnvironmentVariable(KeyEnvironmentVariable) ?? "regions.json";
-        disableS3 = string.Equals(
-            Environment.GetEnvironmentVariable(DisableS3EnvironmentVariable),
-            "true",
-            StringComparison.OrdinalIgnoreCase);
+    }
+
+    public S3RegionConfigProvider(IRegionConfigStore? configStore)
+    {
+        this.configStore = configStore;
     }
 
     public async Task<Region?> GetRegionAsync(string slug)
@@ -97,36 +89,12 @@ public class S3RegionConfigProvider : IRegionProvider
 
     private string GetCatalogSource()
     {
-        if (!string.IsNullOrWhiteSpace(filePath))
-        {
-            return $"file:{Path.GetFullPath(filePath)}";
-        }
-
-        if (!disableS3 && !string.IsNullOrWhiteSpace(bucketName))
-        {
-            return $"s3:{bucketName}/{objectKey}";
-        }
-
-        return "hard-coded";
+        return GetCacheSourceKey(configStore);
     }
 
     private async Task<RegionConfigCatalog> LoadCatalogAsync()
     {
-        if (!string.IsNullOrWhiteSpace(filePath))
-        {
-            try
-            {
-                var catalog = await LoadCatalogFromFileAsync(filePath);
-                LogCatalogLoaded(catalog, $"file:{Path.GetFullPath(filePath)}");
-                return catalog;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Unable to load region config from local file '{filePath}'. Falling back. {ex.Message}");
-            }
-        }
-
-        if (disableS3 || string.IsNullOrWhiteSpace(bucketName))
+        if (configStore == null)
         {
             var catalog = RegionConfigCatalog.FromHardCodedRegions();
             LogCatalogLoaded(catalog, "hard-coded");
@@ -135,22 +103,9 @@ public class S3RegionConfigProvider : IRegionProvider
 
         try
         {
-            using var response = await s3Client.GetObjectAsync(new GetObjectRequest
-            {
-                BucketName = bucketName,
-                Key = objectKey
-            });
-            using var reader = new StreamReader(response.ResponseStream);
-            var json = await reader.ReadToEndAsync();
-            var catalog = JsonSerializer.Deserialize<RegionConfigCatalog>(json, GetJsonOptions());
-
-            if (catalog == null)
-            {
-                throw new InvalidOperationException("Region config JSON deserialized to null.");
-            }
-
-            LogCatalogLoaded(catalog, $"s3:{bucketName}/{objectKey}");
-            return catalog;
+            var snapshot = await configStore.GetCatalogAsync();
+            LogCatalogLoaded(snapshot.Catalog, snapshot.Source);
+            return snapshot.Catalog;
         }
         catch (Exception ex)
         {
@@ -161,32 +116,23 @@ public class S3RegionConfigProvider : IRegionProvider
         }
     }
 
-    private static async Task<RegionConfigCatalog> LoadCatalogFromFileAsync(string path)
-    {
-        var json = await File.ReadAllTextAsync(path);
-        var catalog = JsonSerializer.Deserialize<RegionConfigCatalog>(json, GetJsonOptions());
-
-        if (catalog == null)
-        {
-            throw new InvalidOperationException("Region config JSON deserialized to null.");
-        }
-
-        return catalog;
-    }
-
     private static void LogCatalogLoaded(RegionConfigCatalog catalog, string source)
     {
         Console.WriteLine(
             $"Region config loaded. source={source} version={catalog.ConfigVersion} regions={catalog.Regions.Count}");
     }
 
-    private static JsonSerializerOptions GetJsonOptions()
+    public static void ReplaceCachedCatalog(RegionConfigCatalog catalog, string source)
     {
-        var options = new JsonSerializerOptions
+        lock (CacheLock)
         {
-            PropertyNameCaseInsensitive = true
-        };
-        options.Converters.Add(new JsonStringEnumConverter(JsonNamingPolicy.CamelCase));
-        return options;
+            cachedCatalog = catalog;
+            cachedCatalogSource = source;
+            cacheExpiresUtc = DateTime.UtcNow.Add(CacheDuration);
+        }
     }
+
+    public static string GetCacheSourceKey(IRegionConfigStore? store) => store == null
+        ? "hard-coded"
+        : $"{store.GetType().FullName}:{RuntimeHelpers.GetHashCode(store)}";
 }

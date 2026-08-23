@@ -133,5 +133,20 @@ namespace F3Lambda.Data
                 }
             }
         }
+
+        public static async Task ClearSectorDataAsync()
+        {
+            if (ShouldSkipMomento)
+            {
+                Console.WriteLine("Momento sector cache clear skipped by environment setting.");
+                return;
+            }
+
+            using SimpleCacheClient client = new(
+                Configurations.Laptop.Latest(),
+                authProvider.Value,
+                DEFAULT_TTL);
+            await client.DeleteAsync(cacheName, GetCacheKey("SacSector", CacheKeyType.SectorData));
+        }
     }
 }
