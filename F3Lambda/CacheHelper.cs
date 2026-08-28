@@ -42,7 +42,7 @@ namespace F3Lambda.Data
                 case CacheKeyType.SectorData:
                     return $"SectorData_{prefix}";
                 case CacheKeyType.InitialView:
-                    return $"InitialView_{prefix}";
+                    return $"InitialView_v2_{prefix}";
                 case CacheKeyType.RegionSummary:
                     return $"RegionSummary_{prefix}";
                 default:
