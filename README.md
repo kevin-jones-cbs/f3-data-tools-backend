@@ -67,3 +67,10 @@ aws s3api put-object --bucket f3-data-tools-config-311293999880 --key regions.js
 ```
 
 S3 versioning allows a prior `--version-id` to be downloaded and inspected, then uploaded as a new current version. Direct uploads bypass application validation and audit events, so retain an operator note and the relevant CloudTrail/S3 version metadata.
+
+## Sandbox analytics chat deployment
+
+See [Lambda chat deployment](deploy/chat/README.md) for the existing sandbox
+Lambda streaming host, S3 snapshot caching, configuration, and manual snapshot refresh.
+Local DuckDB development remains supported. Hosted saved-chat persistence is
+not yet configured; the local telemetry database is unchanged.

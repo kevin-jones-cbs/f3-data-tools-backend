@@ -6,8 +6,7 @@ using System.Text.RegularExpressions;
 
 namespace F3Lambda.Analytics;
 
-// An S3 implementation can download a versioned object into /tmp and return its
-// local path here. Query execution and chat orchestration need not change.
+// Providers resolve local files or immutable cached S3 snapshots.
 public interface IAnalyticsSnapshotProvider
 {
     Task<string> GetLocalPathAsync(CancellationToken cancellationToken);
@@ -122,6 +121,8 @@ public sealed class DuckDbAnalyticsDatabase(IAnalyticsSnapshotProvider snapshots
                 throw new InvalidOperationException("The configured snapshot contains data for a different region.");
         }
         var result = await QueryAsync("SELECT CAST((SELECT refreshed_at FROM import_metadata LIMIT 1) AS VARCHAR) AS refreshed_at, CAST(min(date) AS VARCHAR) AS first_date, CAST(max(date) AS VARCHAR) AS last_date FROM posts", cancellationToken);
+        if (result.Rows.Length != 1 || result.Rows[0].Any(value => value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())))
+            throw new InvalidOperationException("The attendance snapshot is empty or has invalid metadata.");
         var path = await snapshots.GetLocalPathAsync(cancellationToken);
         await using var file = File.OpenRead(path);
         var hash = Convert.ToHexString(await SHA256.HashDataAsync(file, cancellationToken)).ToLowerInvariant();

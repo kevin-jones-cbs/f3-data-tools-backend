@@ -21,7 +21,7 @@
   </ItemGroup>
   <ItemGroup>
     <Reference Include="F3Core">
-      <HintPath>..\Packages\F3Core.dll</HintPath>
+      <HintPath>Packages\F3Core.dll</HintPath>
     </Reference>
   </ItemGroup>
 
@@ -29,6 +29,7 @@
   <ItemGroup>
     <None Update="Secrets\SvcAct.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
     </None>
   </ItemGroup>
 </Project>

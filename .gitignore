@@ -402,3 +402,6 @@ FodyWeavers.xsd
 # F3
 /F3Lambda/Secrets/SvcAct.json
 /F3Lambda/Secrets/chat.local.json
+
+# Local Lambda deployment package
+/chat-publish.zip

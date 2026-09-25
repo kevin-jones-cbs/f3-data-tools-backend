@@ -10,9 +10,11 @@ on:
   push:
     branches:
       - main
+      - sandbox
 
 jobs:
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     steps:
@@ -38,3 +40,24 @@ jobs:
       run: |
         aws lambda update-function-code --function-name ${{env.LAMBDA_NAME}} --zip-file fileb://publish.zip
         aws lambda wait function-updated --function-name ${{env.LAMBDA_NAME}}
+
+  deploy-sandbox:
+    if: github.ref == 'refs/heads/sandbox'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: lambda-sandbox
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Test backend
+        run: dotnet test F3Lambda.Tests/F3Lambda.Tests.csproj --verbosity quiet
+      - name: Package streaming API and DuckDB
+        run: deploy/chat/package.sh
+      - name: Deploy existing sandbox Lambda
+        run: |
+          aws s3 cp chat-publish.zip s3://f3-data-tools-config-311293999880/deployments/sandbox/chat-publish-${{ github.sha }}.zip
+          aws lambda update-function-code --function-name F3Pax-sandbox --s3-bucket f3-data-tools-config-311293999880 --s3-key deployments/sandbox/chat-publish-${{ github.sha }}.zip --query '{FunctionName:FunctionName,LastUpdateStatus:LastUpdateStatus}'
+          aws lambda wait function-updated --function-name F3Pax-sandbox

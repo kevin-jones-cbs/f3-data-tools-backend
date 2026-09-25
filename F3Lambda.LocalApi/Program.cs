@@ -1,17 +1,19 @@
 using Amazon.Lambda.APIGatewayEvents;
+using Amazon.S3;
 using F3Lambda;
 using F3Lambda.Data;
 using F3Lambda.Analytics;
 using System.Text.Json;
 
-UseLambdaProjectDirectoryForLocalSecrets();
+var hosted = !string.IsNullOrEmpty(Environment.GetEnvironmentVariable("AWS_LAMBDA_FUNCTION_NAME"));
+if (!hosted) UseLambdaProjectDirectoryForLocalSecrets();
 
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(CacheHelper.SkipMomentoEnvironmentVariable)))
+if (!hosted && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(CacheHelper.SkipMomentoEnvironmentVariable)))
 {
     Environment.SetEnvironmentVariable(CacheHelper.SkipMomentoEnvironmentVariable, "true");
 }
 
-if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(S3RegionConfigProvider.FileEnvironmentVariable)) &&
+if (!hosted && string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(S3RegionConfigProvider.FileEnvironmentVariable)) &&
     File.Exists("regions.json"))
 {
     Environment.SetEnvironmentVariable(S3RegionConfigProvider.FileEnvironmentVariable, "regions.json");
@@ -21,7 +23,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration
     .AddJsonFile(Path.GetFullPath("Secrets/chat.local.json"), optional: true, reloadOnChange: false)
     .AddEnvironmentVariables(); // Environment overrides local file settings for evals/hosting.
-builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 64 * 1024);
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 6 * 1024 * 1024);
 var analyticsPath = builder.Configuration["F3_ANALYTICS_DB_PATH"]
     ?? Path.GetFullPath("../tools/southfork-duckdb/data/southfork.duckdb");
 var defaultModel = builder.Configuration["OPENROUTER_MODEL"] ?? "";
@@ -32,27 +34,52 @@ var openRouterKey = builder.Configuration["OPENROUTER_API_KEY"] ?? "";
 var regionPaths = builder.Configuration.GetSection("F3_ANALYTICS_REGIONS").GetChildren()
     .ToDictionary(c => ChatRegion.Normalize(c.Key), c => c.Value ?? "");
 regionPaths.TryAdd("southfork", analyticsPath);
+var duckDbExecutable = builder.Configuration["DUCKDB_EXECUTABLE"] ?? "duckdb";
 var telemetryPath = builder.Configuration["F3_CHAT_LOG_DB_PATH"]
     ?? Path.GetFullPath("../tools/chat-telemetry/data/chat-telemetry.duckdb");
-if (regionPaths.Values.Any(path => Path.GetFullPath(path) == Path.GetFullPath(telemetryPath)))
+if (regionPaths.Values.Any(path => !path.StartsWith("s3://", StringComparison.OrdinalIgnoreCase) &&
+    Path.GetFullPath(path) == Path.GetFullPath(telemetryPath)))
     throw new InvalidOperationException("Chat telemetry must use a separate database from the attendance snapshot.");
-builder.Services.AddSingleton(new DuckDbChatTelemetry(telemetryPath,
-    builder.Configuration["DUCKDB_EXECUTABLE"] ?? "duckdb", builder.Configuration["F3_CHAT_LOG_SOURCE"] ?? "app"));
-builder.Services.AddSingleton<IChatTelemetry>(sp => sp.GetRequiredService<DuckDbChatTelemetry>());
-var regionDatabases = regionPaths.ToDictionary(entry => entry.Key, entry => (IAnalyticsDatabase)
-    new DuckDbAnalyticsDatabase(new LocalAnalyticsSnapshotProvider(entry.Value),
-        builder.Configuration["DUCKDB_EXECUTABLE"] ?? "duckdb", entry.Key));
+// A local writable DuckDB is not durable or shared across Lambda environments.
+if (!hosted)
+{
+    builder.Services.AddSingleton(new DuckDbChatTelemetry(telemetryPath,
+        duckDbExecutable, builder.Configuration["F3_CHAT_LOG_SOURCE"] ?? "app"));
+    builder.Services.AddSingleton<IChatTelemetry>(sp => sp.GetRequiredService<DuckDbChatTelemetry>());
+}
+var cacheRoot = builder.Configuration["F3_ANALYTICS_CACHE_PATH"]
+    ?? Path.Combine(Path.GetTempPath(), "f3-analytics");
+AmazonS3Client? s3 = null;
+var regionSnapshots = regionPaths.ToDictionary(entry => entry.Key, entry =>
+{
+    if (!entry.Value.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+        return (IAnalyticsSnapshotProvider)new LocalAnalyticsSnapshotProvider(entry.Value);
+    var uri = new Uri(entry.Value);
+    if (uri.Host.Length == 0 || uri.AbsolutePath.Length <= 1 || uri.Query.Length > 0 || uri.Fragment.Length > 0)
+        throw new InvalidOperationException("Use an S3 snapshot URI with a bucket and object key, without query or fragment.");
+    s3 ??= new AmazonS3Client(); // Lambda execution-role credentials; never passed to DuckDB.
+    return new S3AnalyticsSnapshotProvider(s3, uri.Host, Uri.UnescapeDataString(uri.AbsolutePath[1..]),
+        Path.Combine(cacheRoot, entry.Key), async (path, ct) =>
+        {
+            var db = new DuckDbAnalyticsDatabase(new LocalAnalyticsSnapshotProvider(path), duckDbExecutable, entry.Key);
+            await db.GetSnapshotAsync(ct); // Validate schema, metadata, and region before publishing.
+        });
+});
 IAnalyticsDatabase DatabaseFor(string region)
 {
     region = ChatRegion.Normalize(region);
-    return regionDatabases.TryGetValue(region, out var db) ? db
+    return regionSnapshots.TryGetValue(region, out var snapshot)
+        ? new DuckDbAnalyticsDatabase(new PinnedAnalyticsSnapshotProvider(snapshot), duckDbExecutable, region)
         : throw new InvalidOperationException($"No attendance snapshot is configured for {ChatRegion.DisplayName(region)}.");
 }
+var allowedOrigins = (builder.Configuration["F3_CHAT_ALLOWED_ORIGINS"] ??
+    "http://localhost:5090,http://127.0.0.1:5090,http://localhost:5173,http://127.0.0.1:5173")
+    .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
 builder.Services.AddSingleton<Func<string, AnalyticsChatService>>(sp =>
 {
     var http = new HttpClient { Timeout = TimeSpan.FromSeconds(100) };
     return region => new AnalyticsChatService(http, DatabaseFor(region), openRouterKey, defaultModel, allowedModels,
-        sp.GetRequiredService<IChatTelemetry>(),
+        sp.GetService<IChatTelemetry>(),
         ex => sp.GetRequiredService<ILogger<AnalyticsChatService>>().LogWarning("Chat telemetry was not saved: {ErrorType}", ex.GetType().Name),
         ChatRegion.Normalize(region));
 });
@@ -61,19 +88,21 @@ builder.Services.AddCors(options =>
     options.AddDefaultPolicy(policy =>
     {
         policy
-            .WithOrigins("http://localhost:5090", "http://127.0.0.1:5090", "http://localhost:5173", "http://127.0.0.1:5173")
+            .WithOrigins(allowedOrigins)
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
 });
 
 var app = builder.Build();
-app.UseCors();
+// The hosted Function URL already owns CORS; do not emit duplicate headers.
+if (!hosted) app.UseCors();
 
-var lambda = new Function();
+if (s3 != null) app.Lifetime.ApplicationStopped.Register(s3.Dispose);
+if (hosted) app.Logger.LogWarning("Saved-chat persistence is not configured for Lambda; chat bodies are not saved.");
+var lambda = new Lazy<Function>(() => new Function());
 
-// Local prototype only. A hosted paid chat endpoint needs the application's
-// authentication and per-user quotas before being exposed publicly.
+// Shared local/Lambda chat routes; deployment sets the allowed frontend origin.
 app.MapGet("/chat/status", async (string? region, CancellationToken ct) =>
 {
     try
@@ -83,11 +112,23 @@ app.MapGet("/chat/status", async (string? region, CancellationToken ct) =>
     }
     catch (Exception ex) when (ex is InvalidOperationException or ArgumentException or System.ComponentModel.Win32Exception)
     {
-        return Results.Json(new { error = "The local attendance snapshot is unavailable. Check backend setup." }, statusCode: 503);
+        return Results.Json(new { error = "The attendance snapshot is unavailable. Check backend setup." }, statusCode: 503);
     }
 });
 
 var chatGate = new SemaphoreSlim(2);
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/chat") && context.Request.ContentLength > 64 * 1024)
+    {
+        context.Response.StatusCode = 413;
+        return;
+    }
+    if (context.Request.Path.StartsWithSegments("/chat") &&
+        context.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } limit)
+        limit.MaxRequestBodySize = 64 * 1024;
+    await next(context);
+});
 app.MapPost("/chat", async (ChatRequest request, Func<string, AnalyticsChatService> chatFor, CancellationToken ct) =>
 {
     if (!await chatGate.WaitAsync(0, ct))
@@ -98,7 +139,7 @@ app.MapPost("/chat", async (ChatRequest request, Func<string, AnalyticsChatServi
     catch (InvalidOperationException ex) { return Results.Json(new { error = ex.Message }, statusCode: 503); }
     catch (HttpRequestException ex) { return Results.Json(new { error = ex.Message }, statusCode: 502); }
     catch (OperationCanceledException) { return Results.Json(new { error = "That question took too long. Try a more specific question." }, statusCode: 504); }
-    catch (System.ComponentModel.Win32Exception) { return Results.Json(new { error = "The local query engine is unavailable. Check backend setup." }, statusCode: 503); }
+    catch (System.ComponentModel.Win32Exception) { return Results.Json(new { error = "The query engine is unavailable. Check backend setup." }, statusCode: 503); }
     finally { chatGate.Release(); }
 });
 
@@ -131,43 +172,53 @@ app.MapPost("/chat/stream", async (ChatRequest request, Func<string, AnalyticsCh
     finally { chatGate.Release(); }
 });
 
-var adminPassword = builder.Configuration["F3_CHAT_ADMIN_PASSWORD"];
-var admin = app.MapGroup("/admin/chats");
-admin.AddEndpointFilter(async (context, next) =>
+if (!hosted)
 {
-    var http = context.HttpContext;
-    var origin = http.Request.Headers.Origin.ToString();
-    var localOrigin = origin.Length == 0 || new[] { "http://localhost:5173", "http://127.0.0.1:5173",
-        "http://localhost:5090", "http://127.0.0.1:5090" }.Contains(origin);
-    if (http.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip) ||
-        http.Request.Host.Host is not ("localhost" or "127.0.0.1" or "[::1]" or "::1") || !localOrigin)
-        return Results.StatusCode(403);
-    http.Response.Headers.CacheControl = "no-store";
-    if (string.IsNullOrEmpty(adminPassword)) return Results.StatusCode(503);
-    var supplied = http.Request.Headers["X-Chat-Admin-Password"].ToString();
-    if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supplied)),
-        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(adminPassword))))
-        return Results.StatusCode(401);
-    try { return await next(context); }
-    catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
-    catch (Exception ex) when (ex is IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
-    { return Results.Json(new { error = "Chat logs are temporarily unavailable. Try refreshing." }, statusCode: 503); }
-});
-admin.MapGet("", async (DuckDbChatTelemetry logs, int? offset, string? search, string? status, CancellationToken ct) =>
-{
-    var rows = await logs.ListAsync(offset ?? 0, search, status, ct);
-    return Results.Ok(new { items = rows.Take(25), hasMore = rows.Length > 25 });
-});
-admin.MapGet("/{id:guid}", async (Guid id, DuckDbChatTelemetry logs, CancellationToken ct) =>
-{
-    var row = await logs.GetAsync(id, ct);
-    return row.HasValue ? Results.Ok(row.Value) : Results.NotFound();
-});
+    var adminPassword = builder.Configuration["F3_CHAT_ADMIN_PASSWORD"];
+    var admin = app.MapGroup("/admin/chats");
+    admin.AddEndpointFilter(async (context, next) =>
+    {
+        var http = context.HttpContext;
+        var origin = http.Request.Headers.Origin.ToString();
+        var localOrigin = origin.Length == 0 || new[] { "http://localhost:5173", "http://127.0.0.1:5173",
+            "http://localhost:5090", "http://127.0.0.1:5090" }.Contains(origin);
+        if (http.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip) ||
+            http.Request.Host.Host is not ("localhost" or "127.0.0.1" or "[::1]" or "::1") || !localOrigin)
+            return Results.StatusCode(403);
+        http.Response.Headers.CacheControl = "no-store";
+        if (string.IsNullOrEmpty(adminPassword)) return Results.StatusCode(503);
+        var supplied = http.Request.Headers["X-Chat-Admin-Password"].ToString();
+        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supplied)),
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(adminPassword))))
+            return Results.StatusCode(401);
+        try { return await next(context); }
+        catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
+        catch (Exception ex) when (ex is IOException or OperationCanceledException or System.ComponentModel.Win32Exception)
+        { return Results.Json(new { error = "Chat logs are temporarily unavailable. Try refreshing." }, statusCode: 503); }
+    });
+    admin.MapGet("", async (DuckDbChatTelemetry logs, int? offset, string? search, string? status, CancellationToken ct) =>
+    {
+        var rows = await logs.ListAsync(offset ?? 0, search, status, ct);
+        return Results.Ok(new { items = rows.Take(25), hasMore = rows.Length > 25 });
+    });
+    admin.MapGet("/{id:guid}", async (Guid id, DuckDbChatTelemetry logs, CancellationToken ct) =>
+    {
+        var row = await logs.GetAsync(id, ct);
+        return row.HasValue ? Results.Ok(row.Value) : Results.NotFound();
+    });
 
+}
+else
+{
+    app.MapGet("/admin/chats", () => Results.StatusCode(503));
+    app.MapGet("/admin/chats/{id:guid}", () => Results.StatusCode(503));
+}
+
+app.MapGet("/health", () => Results.Ok(new { status = "ok" }));
 app.MapGet("/", () => Results.Ok(new
 {
-    service = "F3 Lambda Local API",
+    service = hosted ? "F3 Analytics API" : "F3 Lambda Local API",
     post = "/",
     skipMomento = CacheHelper.ShouldSkipMomento,
     regionConfigFile = Environment.GetEnvironmentVariable(S3RegionConfigProvider.FileEnvironmentVariable)
@@ -183,7 +234,7 @@ app.MapPost("/", async (HttpRequest httpRequest) =>
         Body = body
     };
 
-    var result = await lambda.FunctionHandler(request, context: null!);
+    var result = await lambda.Value.FunctionHandler(request, context: null!);
 
     if (result is APIGatewayProxyResponse proxyResponse)
     {
