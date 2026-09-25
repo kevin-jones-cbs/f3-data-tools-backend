@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "scope": {
+    "start_inclusive": "2023-01-01",
+    "end_exclusive": "2026-01-01",
+    "attendance_tables": [
+      "posts",
+      "qsource_posts"
+    ]
+  },
+  "tables": {
+    "posts": {
+      "rows": 39353,
+      "sha256": "19f12bc2e55bd5a30601ca9b8cfcce14940bf92d89afc80fa09958553b62364f"
+    },
+    "qsource_posts": {
+      "rows": 1607,
+      "sha256": "a1ca381507dbb54dbe2abcdc702e33cfde74ee3b9286b18c5ed125e508dcc595"
+    },
+    "pax": {
+      "rows": 1405,
+      "sha256": "f5556b190d223de042a1960b79eb101cde6be3b77416d5ba0b805284fc822c2b"
+    },
+    "aos": {
+      "rows": 24,
+      "sha256": "9d54cea29cdce9fa9b4c0a0339dfe26dcf475cc44c23d2e27e528163ce8f1564"
+    },
+    "historical_totals": {
+      "rows": 0,
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    }
+  },
+  "source_import_metadata": [
+    {
+      "region": "southfork",
+      "refreshed_at": "2026-09-22 21:38:20.468059-07",
+      "source": "Google Sheets via local F3Lambda GetAllPosts; cache bypassed",
+      "schema_version": 1
+    }
+  ],
+  "notes": "Ancillary roster, AO schedule and historical totals are frozen from the original import and are not date-scoped. Cases use attendance tables only."
+}

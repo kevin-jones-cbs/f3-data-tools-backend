@@ -1,0 +1,128 @@
+[
+  {
+    "id": "fng_aos_2025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "In calendar year 2025, which 10 AOs had the most regular attendance records marked FNG? Count records, exclude QSource. Columns: ao, fngs. Order count descending, then AO ascending to break ties. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT ao, count(*) AS fngs FROM posts WHERE date >= DATE '2025-01-01' AND date < DATE '2026-01-01' AND is_fng GROUP BY ao ORDER BY fngs DESC, ao LIMIT 10"
+  },
+  {
+    "id": "pairs_2025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Who posted together most in calendar 2025? Top 10 pairs. A workout is the same AO and date, each person counted once; exclude QSource. Put the alphabetically earlier name first in each pair. Columns: pax_1, pax_2, shared_workouts. Sort count descending, then both names ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "WITH attendance AS (SELECT DISTINCT date, ao, pax FROM posts WHERE date >= DATE '2025-01-01' AND date < DATE '2026-01-01') SELECT a.pax AS pax_1,b.pax AS pax_2,count(*) AS shared_workouts FROM attendance a JOIN attendance b ON a.date=b.date AND a.ao=b.ao AND a.pax<b.pax GROUP BY a.pax,b.pax ORDER BY shared_workouts DESC,pax_1,pax_2 LIMIT 10"
+  },
+  {
+    "id": "pairs_followup_2024",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Who posted together most in calendar 2025? Top 10 pairs. A workout is the same AO and date, each person counted once; exclude QSource. Put the alphabetically earlier name first in each pair. Columns: pax_1, pax_2, shared_workouts. Sort count descending, then both names ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      },
+      {
+        "role": "assistant",
+        "content": "I will compare the top 10 pairs by shared AO/date workouts in calendar 2025, deduplicating attendance and excluding QSource; columns pax_1, pax_2, shared_workouts, with names alphabetical within each pair and ties sorted by both names."
+      },
+      {
+        "role": "user",
+        "content": "Same question, but calendar 2024. Retain all counting, ordering, and column rules. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "WITH attendance AS (SELECT DISTINCT date, ao, pax FROM posts WHERE date >= DATE '2024-01-01' AND date < DATE '2025-01-01') SELECT a.pax AS pax_1,b.pax AS pax_2,count(*) AS shared_workouts FROM attendance a JOIN attendance b ON a.date=b.date AND a.ao=b.ao AND a.pax<b.pax GROUP BY a.pax,b.pax ORDER BY shared_workouts DESC,pax_1,pax_2 LIMIT 10"
+  },
+  {
+    "id": "fastest_blocks_2023_2025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Between January 1, 2023 and December 31, 2025 inclusive, who completed the fastest blocks of 100 regular post records? Restart numbering at 1 per PAX within this fixed period, count multiple posts per day, exclude QSource, order posts by date then AO. Compare milestones 100 to 200, 200 to 300, etc.; exclude the first-100 block. Return top 10 columns pax, from_post, to_post, start_date, end_date, elapsed_days. Sort days ascending then pax then from_post. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "WITH numbered AS (SELECT pax,date,row_number() OVER (PARTITION BY pax ORDER BY date,ao) AS n FROM posts WHERE date >= DATE '2023-01-01' AND date < DATE '2026-01-01'), milestones AS (SELECT * FROM numbered WHERE n%100=0), blocks AS (SELECT pax,lag(n) OVER w AS from_post,n AS to_post,lag(date) OVER w AS start_date,date AS end_date FROM milestones WINDOW w AS (PARTITION BY pax ORDER BY n)) SELECT pax,from_post,to_post,start_date,end_date,date_diff('day',start_date,end_date) AS elapsed_days FROM blocks WHERE from_post IS NOT NULL ORDER BY elapsed_days,pax,from_post LIMIT 10"
+  },
+  {
+    "id": "peacock_jan_aug",
+    "messages": [
+      {
+        "role": "user",
+        "content": "For Peacock, compare January through August inclusive in 2023, 2024, and 2025. Count regular attendance records and records marked Q; exclude QSource. Columns: year, posts, qs; year ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT year(date) AS year,count(*) AS posts,count(*) FILTER (WHERE is_q) AS qs FROM posts WHERE lower(pax)='peacock' AND date >= DATE '2023-01-01' AND date < DATE '2026-01-01' AND month(date)<=8 GROUP BY year ORDER BY year"
+  },
+  {
+    "id": "peacock_aos_2025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Where did Peacock post most during calendar 2025? All AOs, counting regular records, excluding QSource. Columns ao, posts; count descending then AO ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT ao,count(*) AS posts FROM posts WHERE lower(pax)='peacock' AND date >= DATE '2025-01-01' AND date < DATE '2026-01-01' GROUP BY ao ORDER BY posts DESC,ao"
+  },
+  {
+    "id": "monthly_2024",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Show monthly South Fork attendance in calendar 2024 to explore seasonality. Deduplicate person/AO/date for attendance; distinct AO/date identifies a workout. Exclude QSource. Columns month (integer 1\u201312), posts, workouts, unique_pax; month ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "WITH attendance AS (SELECT DISTINCT date,ao,pax FROM posts WHERE date >= DATE '2024-01-01' AND date < DATE '2025-01-01') SELECT month(date) AS month,count(*) AS posts,count(DISTINCT (date,ao)) AS workouts,count(DISTINCT pax) AS unique_pax FROM attendance GROUP BY month ORDER BY month"
+  },
+  {
+    "id": "q_leaders_2023",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Which 10 PAX had most regular attendance records marked Q in calendar 2023, excluding QSource? Columns pax, qs. Sort qs descending then pax ascending. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT pax,count(*) AS qs FROM posts WHERE is_q AND date >= DATE '2023-01-01' AND date < DATE '2024-01-01' GROUP BY pax ORDER BY qs DESC,pax LIMIT 10"
+  },
+  {
+    "id": "qsource_2025",
+    "messages": [
+      {
+        "role": "user",
+        "content": "How many QSource attendance records and distinct QSource PAX were there in calendar 2025? Use only qsource_posts. Columns posts, unique_pax. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT count(*) AS posts,count(DISTINCT pax) AS unique_pax FROM qsource_posts WHERE date >= DATE '2025-01-01' AND date < DATE '2026-01-01'"
+  },
+  {
+    "id": "no_data_2020",
+    "messages": [
+      {
+        "role": "user",
+        "content": "How many regular attendance records are in this database for calendar 2020? Columns posts. Report exactly what this snapshot contains; do not infer absence of workouts outside its coverage. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT count(*) AS posts FROM posts WHERE date >= DATE '2020-01-01' AND date < DATE '2021-01-01'"
+  },
+  {
+    "id": "peacock_followup_qs",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Compare Peacock regular posts and Qs for January through August in 2023, 2024 and 2025, excluding QSource."
+      },
+      {
+        "role": "assistant",
+        "content": "The comparison uses Peacock regular attendance from January through August inclusive in 2023, 2024, and 2025, excluding QSource."
+      },
+      {
+        "role": "user",
+        "content": "For those same years and January\u2013August periods, show only his Q totals, columns year, qs, sorted by year. Return the query table using exactly the requested columns in that order; no extra rank or percentage columns. Explain it briefly."
+      }
+    ],
+    "sql": "SELECT year(date) AS year,count(*) FILTER (WHERE is_q) AS qs FROM posts WHERE lower(pax)='peacock' AND date >= DATE '2023-01-01' AND date < DATE '2026-01-01' AND month(date)<=8 GROUP BY year ORDER BY year"
+  }
+]
