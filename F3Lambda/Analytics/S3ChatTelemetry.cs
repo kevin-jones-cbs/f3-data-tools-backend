@@ -27,5 +27,17 @@ public sealed class S3ChatTelemetry(IAmazonS3 s3, string bucket, string prefix) 
             ContentBody = JsonSerializer.Serialize(trace, JsonOptions),
             ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
         }, timeout.Token);
+        if (Guid.TryParse(trace.Request.ConversationId, out var conversationId))
+        {
+            // A small independent pointer allows complete conversation reads across date partitions.
+            await s3.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = bucket,
+                Key = $"{(keyPrefix.Length == 0 ? "" : keyPrefix + "/")}conversations/{conversationId:D}/{date}/{id:D}.json",
+                ContentType = "application/json",
+                ContentBody = JsonSerializer.Serialize(new { key }, JsonOptions),
+                ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
+            }, timeout.Token);
+        }
     }
 }

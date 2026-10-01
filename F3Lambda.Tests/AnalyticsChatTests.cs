@@ -273,6 +273,31 @@ public class AnalyticsChatTests
         finally { File.Delete(path); File.Delete(path + ".wal"); }
     }
 
+    [Fact]
+    public async Task RealTelemetryConversationIncludesLaterTurnsButNotOtherBrowsers()
+    {
+        var executable = Environment.GetEnvironmentVariable("F3_TELEMETRY_TEST_DUCKDB");
+        if (string.IsNullOrEmpty(executable)) return;
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".duckdb");
+        try
+        {
+            var sink = new DuckDbChatTelemetry(path, executable, "test");
+            var conversation = Guid.NewGuid().ToString();
+            var first = new ChatTrace { StartedAt = DateTimeOffset.UtcNow.AddDays(-2),
+                Request = new([new("user", "First question")], ConversationId: conversation, VisitorId: "one") };
+            var later = new ChatTrace { Request = new([new("user", "Later question")], ConversationId: conversation, VisitorId: "one") };
+            await sink.WriteAsync(first);
+            await sink.WriteAsync(later);
+            await sink.WriteAsync(new ChatTrace { Request = new([new("user", "Other browser")], ConversationId: conversation, VisitorId: "two") });
+            var turns = await sink.GetConversationAsync(Guid.Parse(first.Id), default);
+            Assert.Equal(2, turns.Length);
+            Assert.Equal(first.Id, turns[0].GetProperty("event").GetProperty("id").GetString());
+            Assert.Equal(later.Id, turns[1].GetProperty("event").GetProperty("id").GetString());
+            Assert.Empty(await sink.GetConversationAsync(Guid.NewGuid(), default));
+        }
+        finally { File.Delete(path); File.Delete(path + ".wal"); }
+    }
+
     private sealed class RecordingTelemetry : IChatTelemetry
     {
         public bool Fail { get; init; }

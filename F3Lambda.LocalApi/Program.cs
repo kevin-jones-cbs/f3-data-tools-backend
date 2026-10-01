@@ -247,7 +247,15 @@ if (!hosted)
         }
         if (!string.IsNullOrEmpty(source) && source != "local") throw new ArgumentException("Invalid log source.");
         var row = await logs.GetAsync(id, ct);
-        return row.HasValue ? Results.Ok(row.Value) : Results.NotFound();
+        if (!row.HasValue) return Results.NotFound();
+        var recordNode = System.Text.Json.Nodes.JsonNode.Parse(row.Value.GetRawText())!.AsObject();
+        var conversationRows = await logs.GetConversationAsync(id, ct);
+        recordNode["conversation"] = JsonSerializer.SerializeToNode(new
+        {
+            turns = conversationRows.Take(500).Select(r => r.GetProperty("event")),
+            truncated = conversationRows.Length > 500, indexed = true
+        });
+        return Results.Ok(recordNode);
     });
 
 }

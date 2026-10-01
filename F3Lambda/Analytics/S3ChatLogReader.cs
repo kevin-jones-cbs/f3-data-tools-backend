@@ -58,9 +58,57 @@ public sealed class S3ChatLogReader(IAmazonS3 s3, string bucket, string prefix =
         try
         {
             var trace = cache.Values.FirstOrDefault(t => Guid.TryParse(t.Id, out var traceId) && traceId == id);
-            return trace == null ? null : new { source = "sandbox", region = trace.Region ?? trace.Request.Region, @event = trace };
+            if (trace == null) return null;
+            var conversation = await ReadConversationAsync(trace, ct);
+            return new { source = "sandbox", region = trace.Region ?? trace.Request.Region, @event = trace, conversation };
         }
         finally { gate.Release(); }
+    }
+
+    private async Task<object> ReadConversationAsync(ChatTrace selected, CancellationToken ct)
+    {
+        var turns = new Dictionary<string, ChatTrace> { [selected.Id] = selected };
+        if (!Guid.TryParse(selected.Request.ConversationId, out var conversationId))
+            return new { turns = turns.Values.ToArray(), truncated = false, indexed = false };
+        foreach (var trace in cache.Values.Where(t => t.Request.ConversationId == selected.Request.ConversationId &&
+            t.Request.VisitorId == selected.Request.VisitorId && t.Request.Region == selected.Request.Region)) turns[trace.Id] = trace;
+        var conversationPrefix = $"{prefix.Trim('/')}/conversations/{conversationId:D}/";
+        string? continuation = null;
+        long bytes = 0;
+        var count = 0;
+        bool limited = false, indexed = false;
+        do
+        {
+            var page = await s3.ListObjectsV2Async(new ListObjectsV2Request
+            {
+                BucketName = bucket, Prefix = conversationPrefix, ContinuationToken = continuation, MaxKeys = 500
+            }, ct);
+            foreach (var entry in page.S3Objects ?? [])
+            {
+                // Index keys encode the original date/key; never trust arbitrary pointer destinations.
+                var suffix = entry.Key[conversationPrefix.Length..];
+                var parts = suffix.Split('/');
+                if (parts.Length != 4 || !DateOnly.TryParseExact(string.Join("-", parts.Take(3)), "yyyy-MM-dd", out _) ||
+                    !parts[3].EndsWith(".json") || !Guid.TryParse(parts[3][..^5], out var id)) continue;
+                indexed = true;
+                if (++count > 500) { limited = true; break; }
+                var key = $"{prefix.Trim('/')}/{suffix}";
+                ChatTrace trace;
+                if (cache.TryGetValue(key, out var cached)) trace = cached;
+                else
+                {
+                    using var response = await s3.GetObjectAsync(bucket, key, ct);
+                    bytes += response.ContentLength;
+                    if (bytes > 32 * 1024 * 1024) { limited = true; break; }
+                    trace = await JsonSerializer.DeserializeAsync<ChatTrace>(response.ResponseStream, JsonOptions, ct)
+                        ?? throw new IOException("Empty chat log.");
+                }
+                if (trace.Request.ConversationId == selected.Request.ConversationId && trace.Request.VisitorId == selected.Request.VisitorId &&
+                    trace.Request.Region == selected.Request.Region) turns[trace.Id] = trace;
+            }
+            continuation = page.IsTruncated == true ? page.NextContinuationToken : null;
+        } while (continuation != null && !limited);
+        return new { turns = turns.Values.OrderBy(t => t.StartedAt).ThenBy(t => t.Id).Take(500).ToArray(), truncated = limited || turns.Count > 500, indexed };
     }
 
     private async Task RefreshAsync(DateOnly from, DateOnly to, CancellationToken ct)

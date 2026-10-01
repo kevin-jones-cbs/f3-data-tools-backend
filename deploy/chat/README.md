@@ -123,3 +123,18 @@ A status request validates the snapshot without invoking a paid AI model.
 Local development still saves the separate telemetry DuckDB. Hosted chat logs
 are stored privately in S3; `/admin/chats` returns 503 on Lambda.
 The member-facing Function URL remains unauthenticated, as before.
+
+Conversation review: opening a saved turn shows the stored conversation, oldest
+first, including follow-ups outside the date filter. Each turn keeps its question,
+answer, visualizations, and diagnostic trace. The writer also creates a small
+encrypted pointer at `chat-logs/sandbox/conversations/{conversationId}/{yyyy/MM/dd}/{traceId}.json`.
+These independent index objects avoid rescanning the entire archive. The existing
+pilot turns were backfilled with pointers; original traces were left untouched.
+
+Telemetry remains best effort: a failed index write is reported through the existing
+telemetry warning while the dated trace remains saved. Missing indexes can omit a
+turn from cross-date conversation discovery; currently loaded matching turns are
+also included, and unindexed legacy conversations are labeled in the viewer.
+Conversation display is bounded to 500 turns and 32 MB of additional downloaded
+trace data, with an explicit partial-results notice. Local DuckDB conversations are
+also grouped across dates, with the same 500-turn display limit.

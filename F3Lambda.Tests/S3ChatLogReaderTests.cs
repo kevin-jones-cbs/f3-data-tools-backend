@@ -69,12 +69,35 @@ public class S3ChatLogReaderTests
         Assert.Equal(1, s3.Downloads);
     }
 
+    [Fact]
+    public async Task OpeningEarlyTurnLoadsLaterConversationTurnsOutsideDateFilter()
+    {
+        using var s3 = new FakeS3();
+        var conversation = Guid.NewGuid().ToString();
+        var first = new ChatTrace { StartedAt = new DateTimeOffset(2026, 9, 30, 1, 0, 0, TimeSpan.Zero),
+            Request = new ChatRequest([new("user", "First")], ConversationId: conversation, VisitorId: "browser") };
+        var later = new ChatTrace { StartedAt = first.StartedAt.AddDays(2),
+            Request = new ChatRequest([new("user", "Later")], ConversationId: conversation, VisitorId: "browser") };
+        var differentBrowser = new ChatTrace { StartedAt = first.StartedAt.AddDays(1),
+            Request = new ChatRequest([new("user", "Unrelated")], ConversationId: conversation, VisitorId: "other") };
+        foreach (var trace in new[] { first, later, differentBrowser }) { s3.Add(trace); s3.AddIndex(trace); }
+        var reader = new S3ChatLogReader(s3, "bucket", "logs");
+        await reader.ListAsync(Day, Day, 0, null, null, default);
+        var record = Json((await reader.GetAsync(Guid.Parse(first.Id), default))!);
+        var turns = record.GetProperty("conversation").GetProperty("turns");
+        Assert.Equal(2, turns.GetArrayLength());
+        Assert.Equal(first.Id, turns[0].GetProperty("id").GetString());
+        Assert.Equal(later.Id, turns[1].GetProperty("id").GetString());
+        Assert.True(record.GetProperty("conversation").GetProperty("indexed").GetBoolean());
+    }
+
     private sealed class FakeS3() : AmazonS3Client(new Amazon.Runtime.AnonymousAWSCredentials(), Amazon.RegionEndpoint.USWest1)
     {
         private readonly Dictionary<string, string> objects = [];
         public int Lists, Downloads;
         public bool Paginate;
         public long? ObjectSize;
+        public void AddIndex(ChatTrace trace) => objects.Add($"logs/conversations/{trace.Request.ConversationId}/{trace.StartedAt:yyyy/MM/dd}/{trace.Id}.json", "{}");
         public void Add(ChatTrace trace) => objects.Add($"logs/{trace.StartedAt:yyyy/MM/dd}/{trace.Id}.json", JsonSerializer.Serialize(trace, Options));
         public override Task<ListObjectsV2Response> ListObjectsV2Async(ListObjectsV2Request request, CancellationToken cancellationToken = default)
         {

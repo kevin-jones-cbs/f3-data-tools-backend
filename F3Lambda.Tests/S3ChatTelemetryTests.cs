@@ -35,6 +35,24 @@ public class S3ChatTelemetryTests
     }
 
     [Fact]
+    public async Task ConversationIndexPointsToImmutableTurnAcrossDates()
+    {
+        using var s3 = new FakeS3();
+        var conversationId = Guid.NewGuid().ToString();
+        var trace = new ChatTrace
+        {
+            StartedAt = DateTimeOffset.Parse("2026-09-30T23:30:00-07:00"),
+            Request = new ChatRequest([new("user", "Follow-up")], ConversationId: conversationId)
+        };
+        await new S3ChatTelemetry(s3, "bucket", "logs").WriteAsync(trace);
+        Assert.Equal(2, s3.Requests.Count);
+        var index = Assert.Single(s3.Requests.Where(r => r.Key.Contains("/conversations/")));
+        Assert.Equal($"logs/conversations/{conversationId}/2026/10/01/{trace.Id}.json", index.Key);
+        Assert.Equal($"logs/2026/10/01/{trace.Id}.json", JsonDocument.Parse(index.ContentBody).RootElement.GetProperty("key").GetString());
+        Assert.Equal(ServerSideEncryptionMethod.AES256, index.ServerSideEncryptionMethod);
+    }
+
+    [Fact]
     public async Task S3FailuresAreObservableToTheChatService()
     {
         using var s3 = new FakeS3 { Fail = true };

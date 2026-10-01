@@ -107,6 +107,19 @@ public sealed class DuckDbChatTelemetry(string path, string executable = "duckdb
         return rows.Length == 0 ? null : rows[0];
     }
 
+    public async Task<JsonElement[]> GetConversationAsync(Guid id, CancellationToken ct)
+    {
+        return await ReadAsync($"""
+            WITH selected AS (SELECT event FROM chat_events WHERE event->>'id' = '{id:D}' LIMIT 1)
+            SELECT event FROM chat_events
+            WHERE event->>'id' = '{id:D}' OR (
+                nullif(event->'request'->>'conversationId', '') = (SELECT event->'request'->>'conversationId' FROM selected)
+                AND coalesce(event->'request'->>'visitorId', '') = coalesce((SELECT event->'request'->>'visitorId' FROM selected), '')
+                AND coalesce(event->'request'->>'region', 'southfork') = coalesce((SELECT event->'request'->>'region' FROM selected), 'southfork'))
+            ORDER BY CAST(event->>'startedAt' AS TIMESTAMPTZ), event->>'id' LIMIT 501
+            """, ct);
+    }
+
     private async Task<JsonElement[]> ReadAsync(string sql, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
