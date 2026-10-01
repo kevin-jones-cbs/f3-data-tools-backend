@@ -10,7 +10,9 @@ public record ChatRequest(List<ChatMessage> Messages, string? Model = null, stri
 public record ResultColumn(string Key, string Label);
 public record AnalyticsVisualization(string Kind, string Title, ResultColumn[] Columns, JsonElement[][] Rows, bool Truncated);
 public record QueryAttempt(string? Sql, string? Error);
-public sealed class ChatQueryBudgetException(List<QueryAttempt> attempts) : Exception("The assistant could not complete a query within five attempts.")
+public sealed class ChatQueryBudgetException(List<QueryAttempt> attempts) : Exception(attempts.Any(a => a.Error == null)
+    ? "The assistant reached its query limit but did not finish an answer from the available results."
+    : "The assistant could not complete a query within five attempts.")
 {
     public List<QueryAttempt> Attempts { get; } = attempts;
 }
@@ -81,12 +83,22 @@ public sealed class AnalyticsChatService(HttpClient http, IAnalyticsDatabase dat
         if (progress != null) await progress("status", "Looking through the attendance records…");
         for (var turn = 0; turn < 6; turn++)
         {
+            var finalAnswerOnly = attempts >= 5;
+            if (finalAnswerOnly)
+            {
+                if (queries.Count == 0) throw new ChatQueryBudgetException(queryAttempts);
+                messages.Add(new JsonObject { ["role"] = "system", ["content"] =
+                    "No further queries are available. Finish your answer now using only successful tool results already returned. " +
+                    "Summarize the useful findings and clearly say which requested parts could not be verified. " +
+                    "Do not invent missing results or claim the analysis is exhaustive. Do not request more tools." });
+                if (progress != null) await progress("status", "Summarizing the findings…");
+            }
             using var httpRequest = new HttpRequestMessage(HttpMethod.Post, "https://openrouter.ai/api/v1/chat/completions");
             httpRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             var payload = new JsonObject
             {
                 ["model"] = model, ["messages"] = messages.DeepClone(), ["tools"] = Tools(),
-                ["tool_choice"] = "auto", ["max_tokens"] = 3000,
+                ["tool_choice"] = finalAnswerOnly ? "none" : "auto", ["max_tokens"] = 3000,
                 ["provider"] = new JsonObject { ["require_parameters"] = true }
             };
             if (progress != null)
@@ -129,9 +141,19 @@ public sealed class AnalyticsChatService(HttpClient http, IAnalyticsDatabase dat
                 if (visualizations.Count > 0) answer = ChatAnswerFormatting.WithoutTextTables(answer);
                 return new ChatResponse(answer, model, queries, snapshot, visualizations);
             }
+            // A provider ignoring tool_choice=none must not extend the bounded loop.
+            if (finalAnswerOnly) throw new ChatQueryBudgetException(queryAttempts);
             foreach (var call in calls)
             {
-                if (++attempts > 5) throw new ChatQueryBudgetException(queryAttempts);
+                if (attempts >= 5)
+                {
+                    // Respond to every call in a parallel batch so the next model request
+                    // has a valid tool transcript, without executing a sixth query.
+                    messages.Add(new JsonObject { ["role"] = "tool", ["tool_call_id"] = call?["id"]?.GetValue<string>(),
+                        ["content"] = "{\"error\":\"Query limit reached. This query was not executed. Answer using the successful results already available.\"}" });
+                    continue;
+                }
+                attempts++;
                 string toolResult;
                 string? attemptedSql = null;
                 try
@@ -225,6 +247,8 @@ public sealed class AnalyticsChatService(HttpClient http, IAnalyticsDatabase dat
           Explicit user instructions about columns, date windows, counting and limits override defaults.
         - Never report more precision or completeness than the results support. If truncated, say so.
         Query workflow and presentation:
+        - You have at most five query attempts, including errors and lookups. For broad summaries,
+          combine related metrics where practical and finish using the verified results within that budget.
         - Perform any name lookup or diagnostic query BEFORE the final answer query. The application
           renders the LAST successful query, not whichever earlier query you intended as the answer.
           After diagnostics, execute the requested answer query last, even if it must be repeated.

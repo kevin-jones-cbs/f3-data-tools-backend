@@ -71,6 +71,11 @@ Existing application data calls keep their separate `LambdaUrl` configuration.
   locked configuration, stripped subprocess credentials, 256 MB query memory,
   10-second query timeout, 100 returned rows, bounded output, five tool attempts,
   and 120-second overall request deadline. Two chats run concurrently.
+- After five tool attempts, any successful results are sent through one final
+  answer-only model call (`tool_choice=none`). Extra calls in a parallel batch
+  receive an unexecuted-limit result; no sixth database query runs. The final
+  answer must acknowledge unverified parts. If all attempts failed, the request
+  remains an error. Finalization shares the existing deadline and six-call cap.
 - This is a **local prototype**, not a deployed public endpoint. Before exposing
   paid chat publicly, integrate authentication, per-user quotas, and hosting
   controls. The LocalApi host's existing Sheets routes are not a public gateway.

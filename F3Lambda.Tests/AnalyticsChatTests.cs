@@ -162,6 +162,82 @@ public class AnalyticsChatTests
     }
 
     [Fact]
+    public async Task FiveSuccessfulQueriesFinishWithAnswerInsteadOfSixthQuery()
+    {
+        // Reproduce the September failure: one overview query, then four parallel queries.
+        var batch = Tool("q2", "SELECT 2");
+        for (var i = 3; i <= 5; i++)
+            batch["tool_calls"]!.AsArray().Add(Tool($"q{i}", $"SELECT {i}")["tool_calls"]![0]!.DeepClone());
+        var handler = new ScriptedHandler(Tool("q1", "SELECT 1"), batch, Final("Here are the verified September findings."));
+        var db = new FakeDatabase(sql => Result(sql, "posts", 42));
+        var sink = new RecordingTelemetry();
+        using var http = new HttpClient(handler);
+        var response = await new AnalyticsChatService(http, db, "test-key", "fake/model", ["fake/model"], sink)
+            .ChatAsync(Request(), CancellationToken.None);
+        Assert.Equal(5, db.Sql.Count);
+        Assert.Equal(5, response.Queries.Count);
+        Assert.Equal("Here are the verified September findings.", response.Answer);
+        var finalRequest = JsonNode.Parse(handler.Requests[^1])!;
+        Assert.Equal("none", finalRequest["tool_choice"]!.GetValue<string>());
+        Assert.Equal(5, finalRequest["messages"]!.AsArray().Count(m => m?["role"]?.GetValue<string>() == "tool"));
+        Assert.Contains("successful tool results", finalRequest["messages"]!.AsArray().Last()!["content"]!.GetValue<string>());
+        Assert.Equal("success", Assert.Single(sink.Traces).Status);
+        Assert.Equal(3, sink.Traces[0].Calls.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OversizedToolBatchGetsPairedLimitRepliesAndFinalAnswer(bool streaming)
+    {
+        var batch = Tool("q1", "SELECT 1");
+        for (var i = 2; i <= 7; i++)
+            batch["tool_calls"]!.AsArray().Add(Tool($"q{i}", $"SELECT {i}")["tool_calls"]![0]!.DeepClone());
+        var handler = new ScriptedHandler(batch, Final("Verified findings; additional comparisons were not verified.")) { StreamResponses = streaming };
+        var db = new FakeDatabase(sql => Result(sql, "posts", 42));
+        using var http = new HttpClient(handler);
+        var updates = new List<string>();
+        var response = await Service(http, db).ChatAsync(Request(), CancellationToken.None,
+            streaming ? (type, text) => { updates.Add(text); return Task.CompletedTask; } : null);
+        Assert.Equal(5, db.Sql.Count);
+        Assert.Equal(2, handler.Requests.Count);
+        var finalRequest = JsonNode.Parse(handler.Requests[^1])!;
+        Assert.Equal("none", finalRequest["tool_choice"]!.GetValue<string>());
+        var replies = finalRequest["messages"]!.AsArray().Where(m => m?["role"]?.GetValue<string>() == "tool").ToArray();
+        Assert.Equal(7, replies.Length);
+        Assert.Equal(Enumerable.Range(1, 7).Select(i => $"q{i}"), replies.Select(m => m!["tool_call_id"]!.GetValue<string>()));
+        Assert.All(replies.Skip(5), r => Assert.Contains("not executed", r!["content"]!.GetValue<string>()));
+        Assert.Single(response.Visualizations);
+        if (streaming) Assert.Contains(response.Answer, updates);
+    }
+
+    [Fact]
+    public async Task BudgetFinalAnswerCanUseEarlierSuccessAfterFailedQueriesWithoutStaleTable()
+    {
+        var replies = Enumerable.Range(1, 5).Select(i => Tool($"q{i}", $"SELECT {i}")).Append(Final("One verified result; remaining comparisons could not be verified.")).ToArray();
+        var handler = new ScriptedHandler(replies);
+        var db = new FakeDatabase(sql => sql == "SELECT 1" ? Result(sql, "posts", 42) : throw new ArgumentException("bad query"));
+        using var http = new HttpClient(handler);
+        var response = await Service(http, db).ChatAsync(Request(), CancellationToken.None);
+        Assert.Equal(6, handler.Requests.Count);
+        Assert.Single(response.Queries);
+        Assert.Empty(response.Visualizations);
+        Assert.Equal("none", JsonNode.Parse(handler.Requests[^1])!["tool_choice"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task ProviderIgnoringFinalAnswerOnlyCannotRunSixthQuery()
+    {
+        var handler = new ScriptedHandler(Enumerable.Range(1, 6).Select(i => Tool($"q{i}", $"SELECT {i}")).ToArray());
+        var db = new FakeDatabase(sql => Result(sql, "posts", 42));
+        using var http = new HttpClient(handler);
+        var error = await Assert.ThrowsAsync<ChatQueryBudgetException>(() => Service(http, db).ChatAsync(Request(), CancellationToken.None));
+        Assert.Contains("did not finish an answer", error.Message);
+        Assert.Equal(5, db.Sql.Count);
+        Assert.Equal(6, handler.Requests.Count);
+    }
+
+    [Fact]
     public async Task MalformedToolArgumentsCanBeCorrected()
     {
         var malformed = Tool("bad", "unused");
@@ -446,12 +522,26 @@ public class AnalyticsChatTests
     private sealed class ScriptedHandler(params JsonObject[] replies) : HttpMessageHandler
     {
         public List<string> Requests { get; } = [];
+        public bool StreamResponses { get; init; }
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
             Assert.Equal("test-key", request.Headers.Authorization?.Parameter);
             Requests.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
             Assert.True(Requests.Count <= replies.Length, "Unexpected extra model call");
+            if (StreamResponses)
+            {
+                Assert.True(JsonNode.Parse(Requests[^1])!["stream"]!.GetValue<bool>());
+                var delta = replies[Requests.Count - 1].DeepClone();
+                var calls = delta["tool_calls"] as JsonArray;
+                if (calls != null)
+                    for (var i = 0; i < calls.Count; i++) calls[i]!["index"] = i;
+                var frame = new JsonObject { ["choices"] = new JsonArray(new JsonObject
+                    { ["delta"] = delta, ["finish_reason"] = calls == null ? "stop" : "tool_calls" }) };
+                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(
+                    "data: " + frame.ToJsonString() + "\n\ndata: {\"choices\":[],\"usage\":{\"total_tokens\":12}}\n\ndata: [DONE]\n\n",
+                    Encoding.UTF8, "text/event-stream") };
+            }
             var response = new JsonObject { ["usage"] = new JsonObject { ["prompt_tokens"] = 10, ["completion_tokens"] = 2 }, ["choices"] = new JsonArray(new JsonObject
                 { ["message"] = replies[Requests.Count - 1].DeepClone() }) };
             return new HttpResponseMessage(HttpStatusCode.OK)
