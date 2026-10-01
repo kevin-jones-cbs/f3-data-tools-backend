@@ -298,6 +298,37 @@ public class AnalyticsChatTests
         finally { File.Delete(path); File.Delete(path + ".wal"); }
     }
 
+    [Fact]
+    public async Task RealTelemetryGroupsConversationsBeforePagingAndFollowupSearch()
+    {
+        var executable = Environment.GetEnvironmentVariable("F3_TELEMETRY_TEST_DUCKDB");
+        if (string.IsNullOrEmpty(executable)) return;
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".duckdb");
+        try
+        {
+            var sink = new DuckDbChatTelemetry(path, executable, "test");
+            var first = new ChatTrace { StartedAt = DateTimeOffset.UtcNow.AddMinutes(-1), Status = "success", DurationMs = 100,
+                Request = new([new("user", "Opening")], ConversationId: "group", VisitorId: "one") };
+            await sink.WriteAsync(first);
+            await sink.WriteAsync(new ChatTrace { Status = "error", DurationMs = 200,
+                Request = new([new("user", "Opening"), new("assistant", "Answer"), new("user", "Unique followup")], ConversationId: "group", VisitorId: "one") });
+            await sink.WriteAsync(new ChatTrace { Request = first.Request with { VisitorId = "two" } });
+            await sink.WriteAsync(new ChatTrace { Request = first.Request with { Region = "rubicon" } });
+            await sink.WriteAsync(new ChatTrace()); await sink.WriteAsync(new ChatTrace());
+            var grouped = await sink.ListAsync(0, null, null, default);
+            Assert.Equal(5, grouped.Length);
+            var match = Assert.Single(await sink.ListAsync(0, "Unique followup", "error", default));
+            Assert.Equal(first.Id, match.GetProperty("request_id").GetString());
+            Assert.Equal("Opening", match.GetProperty("question").GetString());
+            Assert.Equal(2, match.GetProperty("turn_count").GetInt32());
+            Assert.Equal(300, match.GetProperty("duration_ms").GetInt64());
+            for (int i = 0; i < 22; i++) await sink.WriteAsync(new ChatTrace { Request = new([], ConversationId: "extra" + i) });
+            Assert.Equal(26, (await sink.ListAsync(0, null, null, default)).Length);
+            Assert.Equal(2, (await sink.ListAsync(25, null, null, default)).Length);
+        }
+        finally { File.Delete(path); File.Delete(path + ".wal"); }
+    }
+
     private sealed class RecordingTelemetry : IChatTelemetry
     {
         public bool Fail { get; init; }

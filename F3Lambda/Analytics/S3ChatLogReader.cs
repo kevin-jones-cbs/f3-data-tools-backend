@@ -26,21 +26,25 @@ public sealed class S3ChatLogReader(IAmazonS3 s3, string bucket, string prefix =
         {
             if (cachedFrom != from || cachedTo != to || DateTimeOffset.UtcNow - refreshedAt > TimeSpan.FromSeconds(60))
                 await RefreshAsync(from, to, ct);
-            var traces = cache.Values.Where(t => DateOnly.FromDateTime(t.StartedAt.UtcDateTime) >= from && DateOnly.FromDateTime(t.StartedAt.UtcDateTime) <= to)
-                .Where(t => string.IsNullOrEmpty(status) || t.Status == status)
-                .Where(t => string.IsNullOrWhiteSpace(search) || Question(t).Contains(search, StringComparison.OrdinalIgnoreCase) ||
-                    (t.Response?.Answer?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))
-                .OrderByDescending(t => t.StartedAt).ThenByDescending(t => t.Id).ToArray();
+            var groups = cache.Values.Where(t => DateOnly.FromDateTime(t.StartedAt.UtcDateTime) >= from && DateOnly.FromDateTime(t.StartedAt.UtcDateTime) <= to)
+                .GroupBy(t => (Conversation: string.IsNullOrEmpty(t.Request.ConversationId) ? t.Id : t.Request.ConversationId,
+                    Standalone: string.IsNullOrEmpty(t.Request.ConversationId), t.Request.VisitorId, Region: t.Region ?? t.Request.Region))
+                .Where(g => g.Any(t => (string.IsNullOrEmpty(status) || t.Status == status) &&
+                    (string.IsNullOrWhiteSpace(search) || Question(t).Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                    (t.Response?.Answer?.Contains(search, StringComparison.OrdinalIgnoreCase) ?? false))))
+                .Select(g => g.OrderBy(t => t.StartedAt).ThenBy(t => t.Id).ToArray())
+                .OrderByDescending(g => g[^1].StartedAt).ThenByDescending(g => g[0].Id).ToArray();
+            var traces = groups.SelectMany(g => g).ToArray();
             var usage = traces.SelectMany(t => t.Calls).Select(c => c.Output?["usage"]).ToArray();
             return new
             {
-                items = traces.Skip(offset).Take(25).Select(Summary).ToArray(), hasMore = traces.Length > offset + 25,
+                items = groups.Skip(offset).Take(25).Select(Summary).ToArray(), hasMore = groups.Length > offset + 25,
                 refreshedAt, truncated,
                 summary = new
                 {
                     turns = traces.Length,
                     browsers = traces.Select(t => t.Request.VisitorId).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count(),
-                    conversations = traces.Select(t => t.Request.ConversationId).Where(s => !string.IsNullOrEmpty(s)).Distinct().Count(),
+                    conversations = groups.Length,
                     errors = traces.Count(t => t.Status != "success"),
                     cost = usage.Sum(u => Number(u, "cost") ?? 0),
                     costCalls = usage.Count(u => Number(u, "cost") != null), modelCalls = usage.Length,
@@ -156,15 +160,18 @@ public sealed class S3ChatLogReader(IAmazonS3 s3, string bucket, string prefix =
     private static string Question(ChatTrace trace) => trace.Request.Messages.LastOrDefault(m => m.Role == "user")?.Content ?? "";
     private static decimal? Number(System.Text.Json.Nodes.JsonNode? node, string key) =>
         decimal.TryParse(node?[key]?.ToString(), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : null;
-    private static object Summary(ChatTrace trace)
+    private static object Summary(ChatTrace[] turns)
     {
-        var usage = trace.Calls.Select(c => c.Output?["usage"]).ToArray();
-        var question = Question(trace);
+        var trace = turns[0];
+        var latest = turns[^1];
+        var usage = turns.SelectMany(t => t.Calls).Select(c => c.Output?["usage"]).ToArray();
+        var question = trace.Request.Messages.FirstOrDefault(m => m.Role == "user")?.Content ?? Question(trace);
+        var status = turns.Any(t => t.Status == "error") ? "error" : turns.Any(t => t.Status == "canceled_or_timeout") ? "canceled_or_timeout" : latest.Status;
         return new
         {
-            request_id = trace.Id, started_at = trace.StartedAt, model = trace.Model, region = trace.Region ?? trace.Request.Region,
-            status = trace.Status, source = "sandbox", conversation_id = trace.Request.ConversationId,
-            duration_ms = trace.DurationMs, question = question[..Math.Min(300, question.Length)], model_calls = trace.Calls.Count,
+            request_id = trace.Id, started_at = latest.StartedAt, model = turns.Select(t => t.Model).Distinct().Count() == 1 ? trace.Model : "Multiple models", region = trace.Region ?? trace.Request.Region,
+            status, source = "sandbox", conversation_id = trace.Request.ConversationId, turn_count = turns.Length,
+            duration_ms = turns.Sum(t => t.DurationMs), question = question[..Math.Min(300, question.Length)], model_calls = usage.Length,
             input_tokens = usage.Any(u => Number(u, "prompt_tokens") != null) ? usage.Sum(u => Number(u, "prompt_tokens") ?? 0) : (decimal?)null,
             output_tokens = usage.Any(u => Number(u, "completion_tokens") != null) ? usage.Sum(u => Number(u, "completion_tokens") ?? 0) : (decimal?)null,
             cost_usd = usage.Any(u => Number(u, "cost") != null) ? usage.Sum(u => Number(u, "cost") ?? 0) : (decimal?)null,

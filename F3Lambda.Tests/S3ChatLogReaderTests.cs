@@ -21,7 +21,7 @@ public class S3ChatLogReaderTests
         for (int i = 0; i < 27; i++) s3.Add(new ChatTrace
         {
             StartedAt = new DateTimeOffset(2026, 9, 30, 0, i, 0, TimeSpan.Zero), Status = i == 26 ? "error" : "success",
-            Request = new ChatRequest([new("user", "Question " + i)], ConversationId: "conversation", VisitorId: "browser"),
+            Request = new ChatRequest([new("user", "Question " + i)], ConversationId: "conversation-" + i, VisitorId: "browser"),
             Calls = i == 26 ? [new() { Output = JsonNode.Parse("{\"usage\":{\"cost\":0.02,\"prompt_tokens\":10,\"completion_tokens\":4}}")!.AsObject() }] : [new()]
         });
         var reader = new S3ChatLogReader(s3, "bucket", "logs");
@@ -89,6 +89,34 @@ public class S3ChatLogReaderTests
         Assert.Equal(first.Id, turns[0].GetProperty("id").GetString());
         Assert.Equal(later.Id, turns[1].GetProperty("id").GetString());
         Assert.True(record.GetProperty("conversation").GetProperty("indexed").GetBoolean());
+    }
+
+    [Fact]
+    public async Task ConversationGroupingPrecedesSearchAndAggregatesAllMatchingConversationTurns()
+    {
+        using var s3 = new FakeS3();
+        var start = new DateTimeOffset(2026, 9, 30, 1, 0, 0, TimeSpan.Zero);
+        var first = new ChatTrace { StartedAt = start, Status = "success", DurationMs = 100,
+            Request = new([new("user", "Opening question")], ConversationId: "shared", VisitorId: "one") };
+        var later = new ChatTrace { StartedAt = start.AddMinutes(1), Status = "error", DurationMs = 200,
+            Request = new([new("user", "Opening question"), new("assistant", "Answer"), new("user", "Searchable followup")], ConversationId: "shared", VisitorId: "one") };
+        s3.Add(first); s3.Add(later);
+        s3.Add(new ChatTrace { StartedAt = start, Request = first.Request with { VisitorId = "two" } });
+        s3.Add(new ChatTrace { StartedAt = start, Request = first.Request with { Region = "rubicon" } });
+        s3.Add(new ChatTrace { StartedAt = start }); s3.Add(new ChatTrace { StartedAt = start });
+        var reader = new S3ChatLogReader(s3, "bucket", "logs");
+        var all = Json(await reader.ListAsync(Day, Day, 0, null, null, default));
+        Assert.Equal(5, all.GetProperty("items").GetArrayLength());
+        Assert.Equal(5, all.GetProperty("summary").GetProperty("conversations").GetInt32());
+        var filtered = Json(await reader.ListAsync(Day, Day, 0, "Searchable", "error", default));
+        var item = Assert.Single(filtered.GetProperty("items").EnumerateArray());
+        Assert.Equal(first.Id, item.GetProperty("request_id").GetString());
+        Assert.Equal("Opening question", item.GetProperty("question").GetString());
+        Assert.Equal(2, item.GetProperty("turn_count").GetInt32());
+        Assert.Equal(300, item.GetProperty("duration_ms").GetInt64());
+        Assert.Equal("error", item.GetProperty("status").GetString());
+        Assert.Equal(later.StartedAt, item.GetProperty("started_at").GetDateTimeOffset());
+        Assert.Equal(2, filtered.GetProperty("summary").GetProperty("turns").GetInt32());
     }
 
     private sealed class FakeS3() : AmazonS3Client(new Amazon.Runtime.AnonymousAWSCredentials(), Amazon.RegionEndpoint.USWest1)

@@ -94,9 +94,11 @@ Enter the shared admin password configured in `F3_CHAT_ADMIN_PASSWORD` in the
 backend-only `Secrets/chat.local.json` (or environment). Missing configuration
 disables access. Both list and detail endpoints verify the password. The browser
 keeps it only in page memory; Lock admin, navigation, or reload clears it.
-The page shows 25 turns per page, newest first, with question/answer search and a
-status filter. Select a turn for the conversation sent to the model, the displayed
-answer and tables, SQL attempts, and expandable model-call inputs/outputs/usage.
+The page shows 25 conversations per page, ordered by latest activity, with
+question/answer search and a status filter. Follow-ups share one entry titled
+with the opening question; question counts and usage are combined. A match in
+any follow-up returns the conversation. Select an entry for the full transcript;
+expand each question's details for its model context, SQL, and usage.
 Choose **Sandbox (S3)** (the default) to read hosted chats or **Local chats** for
 the local DuckDB. Sandbox reads use the backend's `kevin-personal` AWS profile;
 no manual sync or AWS credentials in the browser are needed. The default location

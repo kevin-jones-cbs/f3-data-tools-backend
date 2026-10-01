@@ -85,19 +85,36 @@ public sealed class DuckDbChatTelemetry(string path, string executable = "duckdb
             if (status is not ("success" or "error" or "canceled_or_timeout")) throw new ArgumentException("Invalid status.");
             filters.Add($"t.status = '{status}'");
         }
-        var where = filters.Count == 0 ? "" : "WHERE " + string.Join(" AND ", filters);
+        var having = filters.Count == 0 ? "" : "HAVING bool_or(" + string.Join(" AND ", filters) + ")";
         return await ReadAsync($"""
-            SELECT t.request_id, t.started_at, t.model, r.region, t.status, t.source, t.conversation_id,
-              t.duration_ms, left(t.question, 300) AS question, t.model_calls,
-              u.input_tokens, u.output_tokens, u.cost_usd, u.usage_calls, u.cost_calls
-            FROM chat_turns t LEFT JOIN (
-              SELECT request_id, CAST(sum(input_tokens) AS BIGINT) AS input_tokens,
-                CAST(sum(output_tokens) AS BIGINT) AS output_tokens, sum(cost_usd) AS cost_usd,
-                count(input_tokens) AS usage_calls, count(cost_usd) AS cost_calls
-              FROM chat_model_calls GROUP BY request_id
-            ) u USING (request_id)
-            LEFT JOIN (SELECT event->>'id' AS request_id, {RegionExpression} AS region FROM chat_events) r USING (request_id)
-            {where} ORDER BY t.started_at DESC, t.request_id DESC LIMIT 26 OFFSET {offset}
+            WITH records AS (
+              SELECT t.*, r.region, r.title, u.input_tokens, u.output_tokens, u.cost_usd, u.usage_calls, u.cost_calls
+              FROM chat_turns t LEFT JOIN (
+                SELECT source, request_id, CAST(sum(input_tokens) AS BIGINT) AS input_tokens,
+                  CAST(sum(output_tokens) AS BIGINT) AS output_tokens, sum(cost_usd) AS cost_usd,
+                  count(input_tokens) AS usage_calls, count(cost_usd) AS cost_calls
+                FROM chat_model_calls GROUP BY source, request_id
+              ) u USING (source, request_id)
+              LEFT JOIN (SELECT source, event->>'id' AS request_id, {RegionExpression} AS region,
+                (SELECT m.value->>'content' FROM json_each(event->'request'->'messages') m
+                 WHERE m.value->>'role' = 'user' ORDER BY CAST(m.key AS INTEGER) LIMIT 1) AS title FROM chat_events) r USING (source, request_id)
+            )
+            SELECT first(t.request_id ORDER BY t.started_at, t.request_id) AS request_id,
+              max(t.started_at) AS started_at,
+              CASE WHEN count(DISTINCT t.model) = 1 THEN first(t.model) ELSE 'Multiple models' END AS model,
+              t.region, t.source, first(t.conversation_id) AS conversation_id,
+              CASE WHEN bool_or(t.status = 'error') THEN 'error'
+                   WHEN bool_or(t.status = 'canceled_or_timeout') THEN 'canceled_or_timeout'
+                   ELSE first(t.status ORDER BY t.started_at DESC, t.request_id DESC) END AS status,
+              count(*) AS turn_count, CAST(sum(t.duration_ms) AS BIGINT) AS duration_ms,
+              left(first(coalesce(t.title, t.question) ORDER BY t.started_at, t.request_id), 300) AS question,
+              CAST(sum(t.model_calls) AS BIGINT) AS model_calls,
+              CAST(sum(t.input_tokens) AS BIGINT) AS input_tokens, CAST(sum(t.output_tokens) AS BIGINT) AS output_tokens,
+              sum(t.cost_usd) AS cost_usd, CAST(sum(t.usage_calls) AS BIGINT) AS usage_calls, CAST(sum(t.cost_calls) AS BIGINT) AS cost_calls
+            FROM records t
+            GROUP BY t.source, t.region, t.visitor_id, nullif(t.conversation_id, '') IS NULL,
+              coalesce(nullif(t.conversation_id, ''), t.request_id)
+            {having} ORDER BY started_at DESC, request_id DESC LIMIT 26 OFFSET {offset}
             """, ct);
     }
 
@@ -110,9 +127,9 @@ public sealed class DuckDbChatTelemetry(string path, string executable = "duckdb
     public async Task<JsonElement[]> GetConversationAsync(Guid id, CancellationToken ct)
     {
         return await ReadAsync($"""
-            WITH selected AS (SELECT event FROM chat_events WHERE event->>'id' = '{id:D}' LIMIT 1)
+            WITH selected AS (SELECT source, event FROM chat_events WHERE event->>'id' = '{id:D}' LIMIT 1)
             SELECT event FROM chat_events
-            WHERE event->>'id' = '{id:D}' OR (
+            WHERE event->>'id' = '{id:D}' OR (source = (SELECT source FROM selected) AND
                 nullif(event->'request'->>'conversationId', '') = (SELECT event->'request'->>'conversationId' FROM selected)
                 AND coalesce(event->'request'->>'visitorId', '') = coalesce((SELECT event->'request'->>'visitorId' FROM selected), '')
                 AND coalesce(event->'request'->>'region', 'southfork') = coalesce((SELECT event->'request'->>'region' FROM selected), 'southfork'))

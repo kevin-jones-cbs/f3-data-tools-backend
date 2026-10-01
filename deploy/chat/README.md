@@ -138,3 +138,12 @@ also included, and unindexed legacy conversations are labeled in the viewer.
 Conversation display is bounded to 500 turns and 32 MB of additional downloaded
 trace data, with an explicit partial-results notice. Local DuckDB conversations are
 also grouped across dates, with the same 500-turn display limit.
+
+The sidebar lists conversations rather than individual turns. Grouping happens
+before pagination for both S3 and local logs, using conversation ID, anonymous
+browser, region, and source; turns without a conversation ID remain separate.
+A follow-up search or status match selects the conversation and includes all its
+loaded turns in the aggregates. The opening question titles the item, its timestamp
+shows latest activity, and `turn_count` counts loaded turns. S3 sidebar totals and
+summary cards cover the selected date window; opening a conversation still reads
+its indexed transcript across dates.
