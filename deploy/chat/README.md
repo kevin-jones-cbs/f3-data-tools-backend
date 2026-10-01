@@ -115,6 +115,26 @@ or failed S3 write can lose a turn. There is no shared writable DuckDB in Lambda
 
 ## Verification and current limits
 
+### Operational logs
+
+Sandbox runtime and HTTP request logs go to CloudWatch group
+`/aws/lambda/F3Pax-sandbox` with 30-day retention. The shared execution role's
+original basic logging policy only permitted the production log group; the
+separate `F3SandboxCloudWatchLogs` inline policy (`logging-policy.json`) grants
+sandbox-only stream creation and writes. The log group is provisioned explicitly.
+Historical sandbox application logs from before this permission fix are unavailable.
+
+```sh
+aws logs tail /aws/lambda/F3Pax-sandbox --since 1h \
+  --profile kevin-personal --region us-west-1
+```
+
+Request validation, oversized bodies, and busy-gate rejections can happen before
+an S3 chat trace exists. HTTP request logs help identify these, and streaming
+failures emit an exception-type warning. Browser-only failures that never reach
+Lambda are not captured here. Lambda's `Errors` metric does not count errors
+handled by the application, including streamed error responses.
+
 Check `/health`, then `/chat/status?region=southfork`, then the sandbox frontend
 at `https://sandbox.d82d0zhpulmga.amplifyapp.com/chat/southfork`.
 Status returns `configured: false` until the OpenRouter key and model are set.

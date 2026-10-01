@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
+      "Resource": "arn:aws:logs:us-west-1:311293999880:log-group:/aws/lambda/F3Pax-sandbox:*",
+      "Condition": {
+        "ArnEquals": {
+          "lambda:SourceFunctionArn": "arn:aws:lambda:us-west-1:311293999880:function:F3Pax-sandbox"
+        }
+      }
+    }
+  ]
+}
