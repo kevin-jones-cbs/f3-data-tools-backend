@@ -405,3 +405,4 @@ FodyWeavers.xsd
 
 # Local Lambda deployment package
 /chat-publish.zip
+/refresh-publish.zip
