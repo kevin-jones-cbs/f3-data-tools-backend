@@ -80,8 +80,35 @@ aws s3 cp tools/southfork-duckdb/data/southfork.duckdb \
 ```
 
 Later requests pick up the upload within five minutes. No deployment is needed.
-Only the attendance file is uploaded; the frozen eval fixture and local chat
-logs remain local. Automatic daily refresh is not configured yet.
+Only the attendance file is uploaded by this refresh command; the frozen eval
+fixture and local chat logs remain local. Automatic daily refresh is not configured yet.
+
+## Hosted chat telemetry
+
+Sandbox saves each completed, failed, or canceled chat turn as a separate JSON
+object at `s3://f3-data-tools-config-311293999880/chat-logs/sandbox/yyyy/MM/dd/{id}.json`.
+Dates use UTC. Objects contain the existing camel-case `ChatTrace` format: request
+and anonymous IDs, response, model calls and usage, query attempts, timing, and
+errors. Validation rejections and requests rejected as busy do not create traces.
+The bucket blocks public access and writes explicitly use S3-managed encryption.
+No expiry or automatic deletion is configured.
+
+Lambda settings:
+
+```
+F3_CHAT_LOG_S3_URI=s3://f3-data-tools-config-311293999880/chat-logs/sandbox/
+```
+
+The execution role's `F3SandboxChatTelemetryWrite` inline policy is checked in as
+`telemetry-policy.json`. It permits only `s3:PutObject` within this prefix, with
+the same sandbox source-function restriction used by snapshot access. It grants
+no log reading or deletion permissions. Local viewing uses the `kevin-personal`
+AWS profile, with no AWS credentials sent to the browser.
+
+Writes are awaited before request completion with a separate five-second timeout,
+including when the client disconnects. Storage failures log a warning and do not
+replace the chat result. This is best-effort telemetry: a hard Lambda termination
+or failed S3 write can lose a turn. There is no shared writable DuckDB in Lambda.
 
 ## Verification and current limits
 
@@ -90,6 +117,6 @@ at `https://sandbox.d82d0zhpulmga.amplifyapp.com/chat/southfork`.
 Status returns `configured: false` until the OpenRouter key and model are set.
 A status request validates the snapshot without invoking a paid AI model.
 
-Local development still saves the separate telemetry DuckDB. Hosted chat bodies
-and token analytics are not persisted yet; `/admin/chats` returns 503 on Lambda.
+Local development still saves the separate telemetry DuckDB. Hosted chat logs
+are stored privately in S3; `/admin/chats` returns 503 on Lambda.
 The member-facing Function URL remains unauthenticated, as before.

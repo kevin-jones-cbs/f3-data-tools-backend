@@ -1,0 +1,15 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": "s3:PutObject",
+      "Resource": "arn:aws:s3:::f3-data-tools-config-311293999880/chat-logs/sandbox/*",
+      "Condition": {
+        "ArnEquals": {
+          "lambda:SourceFunctionArn": "arn:aws:lambda:us-west-1:311293999880:function:F3Pax-sandbox"
+        }
+      }
+    }
+  ]
+}

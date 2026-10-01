@@ -81,15 +81,15 @@ verified user accounts: different devices count separately, clearing storage res
 them, and disabled storage uses an ephemeral ID. Older clients/eval requests may
 omit IDs. No IP address or identity fingerprinting is collected.
 
-Local scope only: Lambda's temporary disk would not provide durable, shared logs.
-A hosted version should implement `IChatTelemetry` with a durable event destination
-(e.g. S3 objects), then ingest those events into DuckDB for analysis. Do not share a
-writable DuckDB file on S3 between Lambda instances. No automatic retention cleanup
-is enabled; delete the local database when no longer needed, with the backend stopped.
+This DuckDB writer is local only. Sandbox Lambda uses `S3ChatTelemetry` to save
+one JSON object per turn; see [hosted setup](../../deploy/chat/README.md#hosted-chat-telemetry).
+No automatic retention cleanup is enabled; delete the local database when no
+longer needed, with the backend stopped.
 
 ## Local admin page
 
-Open **http://localhost:5173/admin/chats** directly; there is no link from member chat.
+Open **http://localhost:5090/admin/chats** directly (or your local frontend port);
+there is no link from member chat.
 Enter the shared admin password configured in `F3_CHAT_ADMIN_PASSWORD` in the
 backend-only `Secrets/chat.local.json` (or environment). Missing configuration
 disables access. Both list and detail endpoints verify the password. The browser
@@ -97,6 +97,20 @@ keeps it only in page memory; Lock admin, navigation, or reload clears it.
 The page shows 25 turns per page, newest first, with question/answer search and a
 status filter. Select a turn for the conversation sent to the model, the displayed
 answer and tables, SQL attempts, and expandable model-call inputs/outputs/usage.
+Choose **Sandbox (S3)** (the default) to read hosted chats or **Local chats** for
+the local DuckDB. Sandbox reads use the backend's `kevin-personal` AWS profile;
+no manual sync or AWS credentials in the browser are needed. The default location
+is `s3://f3-data-tools-config-311293999880/chat-logs/sandbox/` in `us-west-1`.
+Optional local configuration overrides are `F3_CHAT_LOG_AWS_PROFILE`,
+`F3_CHAT_LOG_AWS_REGION`, `F3_CHAT_LOG_S3_BUCKET`, and `F3_CHAT_LOG_S3_PREFIX`.
+
+Sandbox defaults to the last seven UTC dates; choose up to 31 days. Summary cards
+show matching turns, anonymous browsers, conversations, errors/interrupted turns,
+and reported cost, with daily question counts. S3 listings refresh at most once
+per minute and previously downloaded immutable traces are reused. Each window is
+limited to 5,000 objects or 32 MiB of serialized traces, with a visible warning
+when results are partial. Narrow the date range for a larger archive.
+
 List token totals are provider-reported sums; incomplete usage is labeled. Costs
 and missing usage remain unknown rather than estimated.
 
@@ -105,5 +119,5 @@ and missing usage remain unknown rather than estimated.
 They require a loopback connection/host and reject browser origins other than the
 local frontend. This shared-password gate remains local-only; do not proxy these
 endpoints publicly. Responses use `Cache-Control: no-store`. No model requests are
-made by this page. Chats are read from the configured F3_CHAT_LOG_DB_PATH file;
-eval logs stored in a different file are not merged into this list.
+made by this page. Local chats are read from the configured F3_CHAT_LOG_DB_PATH
+file; eval logs stored in a different file are not merged into this list.
