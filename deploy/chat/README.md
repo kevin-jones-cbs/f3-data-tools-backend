@@ -37,6 +37,7 @@ preserved. The Function URL owns hosted CORS; ASP.NET supplies local CORS only.
 No Secrets Manager setup is required. Set `OPENROUTER_API_KEY` directly in Lambda
 Configuration > Environment variables. `OPENROUTER_MODEL` selects the model;
 `OPENROUTER_ALLOWED_MODELS` optionally allows additional model IDs.
+The sandbox default is `OPENROUTER_MODEL=openai/gpt-6-luna`.
 
 Snapshot setting:
 
