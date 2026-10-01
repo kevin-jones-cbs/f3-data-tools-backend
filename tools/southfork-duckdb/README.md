@@ -28,7 +28,9 @@ The exporter uses `F3Lambda/regions.json` for region configuration and invokes
 only `GetAllPosts` locally, with Momento bypassed. It reads live Google Sheets;
 it does not deploy or modify Sheets, cloud region configuration, or caches.
 
-Refresh is manual. Close open DuckDB sessions before refreshing, then reopen to
+Local refresh is manual; the hosted sandbox refreshes daily at 05:00 Pacific via
+[AWS Scheduler and a dedicated Lambda](../../deploy/refresh/README.md).
+Close open DuckDB sessions before refreshing locally, then reopen to
 see the new snapshot. The database is replaced only after a successful import
 and validation. Data files and temporary exports are ignored by Git; credentials
 are not copied into the database. No database server or AI service is required.

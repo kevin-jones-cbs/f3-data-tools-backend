@@ -81,7 +81,9 @@ aws s3 cp tools/southfork-duckdb/data/southfork.duckdb \
 
 Later requests pick up the upload within five minutes. No deployment is needed.
 Only the attendance file is uploaded by this refresh command; the frozen eval
-fixture and local chat logs remain local. Automatic daily refresh is not configured yet.
+fixture and local chat logs remain local. A separate
+[scheduled refresh Lambda](../refresh/README.md) refreshes the sandbox snapshot
+daily at 05:00 America/Los_Angeles through AWS EventBridge Scheduler.
 
 ## Hosted chat telemetry
 

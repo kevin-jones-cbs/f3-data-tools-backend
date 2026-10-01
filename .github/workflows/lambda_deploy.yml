@@ -54,6 +54,8 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Test backend
         run: dotnet test F3Lambda.Tests/F3Lambda.Tests.csproj --verbosity quiet
+      - name: Test scheduled refresh publication safety
+        run: python3 -B -m unittest discover -s deploy/refresh -p 'test_*.py'
       - name: Package streaming API and DuckDB
         run: deploy/chat/package.sh
       - name: Deploy existing sandbox Lambda
