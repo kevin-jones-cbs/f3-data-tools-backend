@@ -1,10 +1,12 @@
-# Local South Fork DuckDB
+# Local regional DuckDB snapshots
 
-Run from this directory:
+Run from this directory to refresh **both South Fork and Gold Rush**:
 
 ```sh
 python3 refresh.py
 duckdb -readonly data/southfork.duckdb
+# Or query Gold Rush:
+duckdb -readonly data/goldrush.duckdb
 ```
 
 At the SQL prompt, try `SHOW TABLES;`, `DESCRIBE posts;`, or:
@@ -48,7 +50,7 @@ are not copied into the database. No database server or AI service is required.
 | `monthly_attendance` | Monthly attendance, unique PAX, and Q counts by AO |
 | `pax_summary` | Regular attendance and Q totals, first/last dates, and AOs visited |
 
-All tables include `region = 'southfork'`. Names and attendance multiplicity are
+All tables include the snapshot's region ID (`southfork` or `goldrush`). Names and attendance multiplicity are
 preserved from the backend; the import does not silently deduplicate or merge
 people. Attendance names may include downrange PAX absent from the roster.
 The AO schedule can have multiple rows per name and excludes retired AOs under
@@ -56,3 +58,13 @@ the backend's existing rules; avoid joining it directly to attendance by name
 without accounting for that multiplicity. Views do not combine historical totals
 or QSource attendance with regular posts. Import counts are checked against the
 backend export, and missing attendance dates, names, or AOs fail the import.
+
+## Supported regions
+
+`supported_regions.json` is the shared list for local refresh, the scheduled worker,
+and deployment permissions/settings. Each normal refresh builds every listed region
+and validates all snapshots before replacing or uploading any. Files stay separate.
+To add a region, add its existing application region ID to this list, redeploy the
+refresh worker, and run it. Configure its local chat path if using local development.
+S3 publication is atomic per file, not across files; an upload failure can leave
+regions with different refresh times until the retry succeeds.

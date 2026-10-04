@@ -43,9 +43,10 @@ Snapshot setting:
 
 ```
 F3_ANALYTICS_REGIONS__southfork=s3://f3-data-tools-config-311293999880/analytics/sandbox/southfork.duckdb
+F3_ANALYTICS_REGIONS__goldrush=s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb
 ```
 
-The execution role must have `s3:GetObject` for that exact object. The sandbox
+The execution role must have `s3:GetObject` for those exact objects. The sandbox
 snapshot permission is restricted by `lambda:SourceFunctionArn` so the shared
 role does not give the production function access to the sandbox snapshot.
 
@@ -78,12 +79,15 @@ python3 tools/southfork-duckdb/refresh.py
 aws s3 cp tools/southfork-duckdb/data/southfork.duckdb \
   s3://f3-data-tools-config-311293999880/analytics/sandbox/southfork.duckdb \
   --profile kevin-personal --region us-west-1
+aws s3 cp tools/southfork-duckdb/data/goldrush.duckdb \
+  s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb \
+  --profile kevin-personal --region us-west-1
 ```
 
 Later requests pick up the upload within five minutes. No deployment is needed.
-Only the attendance file is uploaded by this refresh command; the frozen eval
+Only the attendance snapshots are uploaded by these commands; the frozen eval
 fixture and local chat logs remain local. A separate
-[scheduled refresh Lambda](../refresh/README.md) refreshes the sandbox snapshot
+[scheduled refresh Lambda](../refresh/README.md) refreshes both sandbox snapshots
 daily at 05:00 America/Los_Angeles through AWS EventBridge Scheduler.
 
 ## Hosted chat telemetry

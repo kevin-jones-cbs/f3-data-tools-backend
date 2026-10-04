@@ -34,6 +34,8 @@ var openRouterKey = builder.Configuration["OPENROUTER_API_KEY"] ?? "";
 var regionPaths = builder.Configuration.GetSection("F3_ANALYTICS_REGIONS").GetChildren()
     .ToDictionary(c => ChatRegion.Normalize(c.Key), c => c.Value ?? "");
 regionPaths.TryAdd("southfork", analyticsPath);
+if (!hosted)
+    regionPaths.TryAdd("goldrush", Path.GetFullPath("../tools/southfork-duckdb/data/goldrush.duckdb"));
 var duckDbExecutable = builder.Configuration["DUCKDB_EXECUTABLE"] ?? "duckdb";
 var telemetryPath = builder.Configuration["F3_CHAT_LOG_DB_PATH"]
     ?? Path.GetFullPath("../tools/chat-telemetry/data/chat-telemetry.duckdb");

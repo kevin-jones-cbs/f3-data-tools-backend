@@ -9,6 +9,7 @@ import hashlib
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 
@@ -19,7 +20,10 @@ args = parser.parse_args()
 REGION = "us-west-1"
 ACCOUNT = "311293999880"
 BUCKET = "f3-data-tools-config-311293999880"
-KEY = "analytics/sandbox/southfork.duckdb"
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tools/southfork-duckdb"))
+from refresh import SUPPORTED_REGIONS
+PREFIX = "analytics/sandbox"
+KEYS = {region: f"{PREFIX}/{region}.duckdb" for region in SUPPORTED_REGIONS}
 FUNCTION = "F3AnalyticsRefresh-sandbox"
 ROLE = "F3AnalyticsRefresh-sandbox"
 SCHEDULER_ROLE = "F3AnalyticsRefresh-sandbox-scheduler"
@@ -78,12 +82,13 @@ aws("logs", "put-retention-policy", {"logGroupName": log_group, "retentionInDays
 policy(ROLE, [
     {"Effect": "Allow", "Action": ["logs:CreateLogStream", "logs:PutLogEvents"],
      "Resource": f"arn:aws:logs:{REGION}:{ACCOUNT}:log-group:{log_group}:*"},
-    {"Effect": "Allow", "Action": "s3:PutObject", "Resource": f"arn:aws:s3:::{BUCKET}/{KEY}"},
+    {"Effect": "Allow", "Action": "s3:PutObject",
+     "Resource": [f"arn:aws:s3:::{BUCKET}/{key}" for key in KEYS.values()]},
 ])
 configuration = {"FunctionName": FUNCTION, "Runtime": "python3.13", "Role": execution_role,
-    "Handler": "lambda_function.handler", "Timeout": 300, "MemorySize": 1024,
+    "Handler": "lambda_function.handler", "Timeout": 600, "MemorySize": 1024,
     "Environment": {"Variables": {"GOOGLE_SVC_ACT_JSON": google, "SNAPSHOT_BUCKET": BUCKET,
-        "SNAPSHOT_KEY": KEY, "PATH": "/var/task:/var/lang/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin",
+        "SNAPSHOT_PREFIX": PREFIX, "PATH": "/var/task:/var/lang/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin",
         "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",
         "DOTNET_BUNDLE_EXTRACT_BASE_DIR": "/tmp/dotnet"}}}
 current = aws("lambda", "get-function-configuration", {"FunctionName": FUNCTION}, optional=True)
@@ -123,4 +128,22 @@ for attempt in range(6):
         if "must allow AWS EventBridge Scheduler to assume" not in str(error) or attempt == 5:
             raise
         time.sleep(5)
-print(json.dumps({"function": FUNCTION, "schedule": SCHEDULE, "time": "05:00 America/Los_Angeles", "package": digest}))
+# Keep the shared chat Lambda's other settings and secrets intact. Only the
+# sandbox function may use the new read permissions on its shared IAM role.
+chat = aws("lambda", "get-function-configuration", {"FunctionName": "F3Pax-sandbox"})
+aws("iam", "put-role-policy", {
+    "RoleName": chat["Role"].rsplit("/", 1)[-1], "PolicyName": "F3SandboxAnalyticsSnapshotsRead",
+    "PolicyDocument": json.dumps({"Version": "2012-10-17", "Statement": [{
+        "Effect": "Allow", "Action": "s3:GetObject",
+        "Resource": [f"arn:aws:s3:::{BUCKET}/{key}" for key in KEYS.values()],
+        "Condition": {"ArnEquals": {"lambda:SourceFunctionArn":
+            f"arn:aws:lambda:{REGION}:{ACCOUNT}:function:F3Pax-sandbox"}},
+    }]}),
+})
+variables = chat["Environment"]["Variables"].copy()
+variables.update({f"F3_ANALYTICS_REGIONS__{region}": f"s3://{BUCKET}/{key}" for region, key in KEYS.items()})
+aws("lambda", "update-function-configuration", {"FunctionName": "F3Pax-sandbox",
+    "RevisionId": chat["RevisionId"], "Environment": {"Variables": variables}})
+aws("lambda", "wait", extra=("function-updated-v2", "--function-name", "F3Pax-sandbox"))
+print(json.dumps({"function": FUNCTION, "schedule": SCHEDULE, "regions": list(SUPPORTED_REGIONS),
+    "time": "05:00 America/Los_Angeles", "package": digest}))

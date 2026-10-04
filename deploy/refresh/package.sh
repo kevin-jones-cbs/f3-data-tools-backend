@@ -9,6 +9,7 @@ dotnet publish tools/southfork-duckdb/Export/Export.csproj -c Release -r linux-x
 rm -rf "$build_dir/app/export/Secrets"
 cp F3Lambda/regions.json "$build_dir/app/export/regions.json"
 cp tools/southfork-duckdb/refresh.py deploy/refresh/lambda_function.py "$build_dir/app/"
+cp tools/southfork-duckdb/supported_regions.json "$build_dir/app/"
 curl --fail --location --retry 3 \
   https://github.com/duckdb/duckdb/releases/download/v1.5.3/duckdb_cli-linux-amd64.zip \
   -o "$build_dir/duckdb.zip"

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Refresh a local South Fork DuckDB using the backend's read-only Sheets action."""
+"""Refresh separate snapshots for all supported chat regions from live Sheets."""
 import datetime as dt
 import json
 import os
@@ -10,14 +10,22 @@ import tempfile
 
 HERE = Path(__file__).resolve().parent
 BACKEND = HERE.parent.parent
+SUPPORTED_REGIONS = tuple(json.loads((HERE / "supported_regions.json").read_text()))
+if not SUPPORTED_REGIONS or len(set(SUPPORTED_REGIONS)) != len(SUPPORTED_REGIONS) or any(
+    not isinstance(region, str) or not region.isascii() or not region.isalnum()
+    or region != region.lower() for region in SUPPORTED_REGIONS
+):
+    raise ValueError("Supported regions must be unique lowercase region IDs")
 
 
 def literal(value):
     return "'" + str(value).replace("'", "''") + "'"
 
 
-def build_database(payload, destination, refreshed_at):
+def build_database(payload, destination, refreshed_at, region):
     """Build and validate a new snapshot before replacing the previous database."""
+    if region not in SUPPORTED_REGIONS:
+        raise ValueError(f"Unsupported chat region: {region}")
     if not isinstance(payload.get("posts"), list) or not payload["posts"]:
         raise ValueError("Refusing to replace database with empty/missing posts")
     destination = Path(destination)
@@ -52,12 +60,12 @@ def build_database(payload, destination, refreshed_at):
             source.write_text(json.dumps(rows), encoding="utf-8")
             types = ", ".join(f"{literal(k)}: {literal(v)}" for k, v in columns.items())
             statements.append(
-                f"CREATE TABLE {table} AS SELECT 'southfork' AS region, {selection} "
+                f"CREATE TABLE {table} AS SELECT {literal(region)} AS region, {selection} "
                 f"FROM read_json({literal(source)}, format='array', columns={{{types}}});"
             )
         statements.append(f"""
             CREATE TABLE import_metadata AS SELECT
-                'southfork' AS region,
+                {literal(region)} AS region,
                 {literal(refreshed_at)}::TIMESTAMPTZ AS refreshed_at,
                 'Google Sheets via local F3Lambda GetAllPosts; cache bypassed' AS source,
                 1 AS schema_version;
@@ -100,16 +108,23 @@ def main():
     data = HERE / "data"
     data.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(dir=data) as temporary:
-        export = Path(temporary) / "southfork.json"
-        subprocess.run([
-            "dotnet", "run", "--project", str(HERE / "Export" / "Export.csproj"),
-            "--", str(export),
-        ], cwd=BACKEND / "F3Lambda", check=True)
-        counts = build_database(json.loads(export.read_text()), data / "southfork.duckdb",
-                                dt.datetime.now(dt.timezone.utc).isoformat())
-    print(f"Database: {data / 'southfork.duckdb'}")
-    for table, count in counts.items():
-        print(f"  {table}: {count:,} rows")
+        work = Path(temporary)
+        results = {}
+        for region in SUPPORTED_REGIONS:
+            export = work / f"{region}.json"
+            subprocess.run([
+                "dotnet", "run", "--project", str(HERE / "Export" / "Export.csproj"),
+                "--", region, str(export),
+            ], cwd=BACKEND / "F3Lambda", check=True)
+            results[region] = build_database(json.loads(export.read_text()), work / f"{region}.duckdb",
+                                            dt.datetime.now(dt.timezone.utc).isoformat(), region)
+        # Validate every region before replacing any of the previous snapshots.
+        for region, counts in results.items():
+            destination = data / f"{region}.duckdb"
+            os.replace(work / destination.name, destination)
+            print(f"Database: {destination}")
+            for table, count in counts.items():
+                print(f"  {table}: {count:,} rows")
 
 
 if __name__ == "__main__":
