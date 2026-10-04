@@ -315,6 +315,42 @@ public class AnalyticsChatTests
         Assert.True(warned);
     }
 
+    [Theory]
+    [InlineData("DATE '2020-01-01'")]
+    [InlineData("current_date")]
+    [InlineData(null)]
+    public async Task SnapshotFreshnessIgnoresFutureDates(string? validDate)
+    {
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("F3_ANALYTICS_TEST_DB"))) return;
+        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".duckdb");
+        try
+        {
+            var start = new System.Diagnostics.ProcessStartInfo("duckdb") { RedirectStandardError = true };
+            start.ArgumentList.Add(path);
+            start.ArgumentList.Add("-c");
+            start.ArgumentList.Add("CREATE TABLE import_metadata AS SELECT current_timestamp AS refreshed_at; " +
+                "CREATE TABLE posts AS SELECT DATE '2099-01-01' AS date UNION ALL SELECT current_date + 1" +
+                (validDate == null ? ";" : $" UNION ALL SELECT {validDate};"));
+            using var process = System.Diagnostics.Process.Start(start)!;
+            var error = await process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            Assert.True(process.ExitCode == 0, error);
+            var db = new DuckDbAnalyticsDatabase(new LocalAnalyticsSnapshotProvider(path));
+            if (validDate == null)
+            {
+                await Assert.ThrowsAsync<InvalidOperationException>(() => db.GetSnapshotAsync(CancellationToken.None));
+            }
+            else
+            {
+                var snapshot = await db.GetSnapshotAsync(CancellationToken.None);
+                var expected = await db.QueryAsync($"SELECT CAST({validDate} AS VARCHAR)", CancellationToken.None);
+                Assert.Equal(expected.Rows[0][0].GetString(), snapshot.LastDate);
+                Assert.Equal(expected.Rows[0][0].GetString(), snapshot.FirstDate);
+            }
+        }
+        finally { File.Delete(path); }
+    }
+
     [Fact]
     public async Task RealTelemetryRoundTripsHostileTextAndConcurrentWrites()
     {

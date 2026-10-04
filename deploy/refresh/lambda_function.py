@@ -31,7 +31,7 @@ def handler(event, context):
                 raise ValueError(f"{region} snapshot exceeds the hosted reader's 64 MiB limit")
             latest = subprocess.check_output([
                 "duckdb", "-readonly", "-csv", "-noheader", str(snapshot),
-                "SELECT max(date) FROM posts",
+                "SELECT max(date) FROM posts WHERE date <= current_date",
             ], text=True, timeout=15).strip()
             results[region] = {"refreshedAt": refreshed_at, "latestAttendance": latest, "counts": counts}
 

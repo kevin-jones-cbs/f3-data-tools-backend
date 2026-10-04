@@ -120,7 +120,7 @@ public sealed class DuckDbAnalyticsDatabase(IAnalyticsSnapshotProvider snapshots
             if (regions.Rows.Length != 1 || regions.Rows[0][0].GetString() != expectedRegion)
                 throw new InvalidOperationException("The configured snapshot contains data for a different region.");
         }
-        var result = await QueryAsync("SELECT CAST((SELECT refreshed_at FROM import_metadata LIMIT 1) AS VARCHAR) AS refreshed_at, CAST(min(date) AS VARCHAR) AS first_date, CAST(max(date) AS VARCHAR) AS last_date FROM posts", cancellationToken);
+        var result = await QueryAsync("SELECT CAST((SELECT refreshed_at FROM import_metadata LIMIT 1) AS VARCHAR) AS refreshed_at, CAST(min(date) AS VARCHAR) AS first_date, CAST(max(date) AS VARCHAR) AS last_date FROM posts WHERE date <= current_date", cancellationToken);
         if (result.Rows.Length != 1 || result.Rows[0].Any(value => value.ValueKind != JsonValueKind.String || string.IsNullOrWhiteSpace(value.GetString())))
             throw new InvalidOperationException("The attendance snapshot is empty or has invalid metadata.");
         var path = await snapshots.GetLocalPathAsync(cancellationToken);

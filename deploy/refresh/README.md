@@ -71,3 +71,6 @@ without calling the AI model. The existing local `refresh.py` command remains
 available for manual refreshes.
 
 Tests: `python3 -B -m unittest discover -s deploy/refresh -p 'test_*.py'`.
+
+Snapshot freshness uses the latest attendance date on or before today, excluding
+legacy future-date markers such as 2099. The exported source rows remain intact.
