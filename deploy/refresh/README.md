@@ -40,12 +40,13 @@ python3 deploy/refresh/deploy.py --package /tmp/f3-sandbox-refresh.zip --profile
 ```
 
 This idempotent script updates the worker, IAM policies, and schedule. It also
-configures both snapshot paths and sandbox-only S3 read permissions on the existing
+configures the shared snapshot prefix and sandbox-only S3 read permissions on the existing
 chat Lambda, preserving its other environment settings. It checks
 the AWS account before writes and uses permission-restricted temporary request
 files that are deleted after each call; secrets never appear in command arguments
 or committed files. The worker is deployed separately from
-the normal chat Lambda pipeline.
+the normal chat Lambda pipeline. Deploy the current chat API before running this
+script; it must support `F3_ANALYTICS_S3_PREFIX` and include `analytics-regions.json`.
 
 ## Run immediately / inspect
 

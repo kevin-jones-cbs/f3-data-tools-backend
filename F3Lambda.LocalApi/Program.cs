@@ -33,9 +33,20 @@ var allowedModels = (builder.Configuration["OPENROUTER_ALLOWED_MODELS"] ?? "")
 var openRouterKey = builder.Configuration["OPENROUTER_API_KEY"] ?? "";
 var regionPaths = builder.Configuration.GetSection("F3_ANALYTICS_REGIONS").GetChildren()
     .ToDictionary(c => ChatRegion.Normalize(c.Key), c => c.Value ?? "");
+var supportedRegions = JsonSerializer.Deserialize<string[]>(
+    File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "analytics-regions.json")))!;
+var snapshotPrefix = builder.Configuration["F3_ANALYTICS_S3_PREFIX"];
+if (!string.IsNullOrWhiteSpace(snapshotPrefix))
+{
+    if (!snapshotPrefix.StartsWith("s3://", StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Use an S3 URI for F3_ANALYTICS_S3_PREFIX.");
+    foreach (var region in supportedRegions)
+        regionPaths.TryAdd(region, $"{snapshotPrefix.TrimEnd('/')}/{region}.duckdb");
+}
 regionPaths.TryAdd("southfork", analyticsPath);
 if (!hosted)
-    regionPaths.TryAdd("goldrush", Path.GetFullPath("../tools/southfork-duckdb/data/goldrush.duckdb"));
+    foreach (var region in supportedRegions)
+        regionPaths.TryAdd(region, Path.GetFullPath($"../tools/southfork-duckdb/data/{region}.duckdb"));
 var duckDbExecutable = builder.Configuration["DUCKDB_EXECUTABLE"] ?? "duckdb";
 var telemetryPath = builder.Configuration["F3_CHAT_LOG_DB_PATH"]
     ?? Path.GetFullPath("../tools/chat-telemetry/data/chat-telemetry.duckdb");

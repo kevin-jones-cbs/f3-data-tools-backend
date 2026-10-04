@@ -7,5 +7,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\F3Lambda\F3Lambda.csproj" />
+    <Content Include="../tools/southfork-duckdb/supported_regions.json" Link="analytics-regions.json"
+             CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

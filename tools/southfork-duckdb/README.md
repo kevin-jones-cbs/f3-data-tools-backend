@@ -65,6 +65,7 @@ backend export, and missing attendance dates, names, or AOs fail the import.
 and deployment permissions/settings. Each normal refresh builds every listed region
 and validates all snapshots before replacing or uploading any. Files stay separate.
 To add a region, add its existing application region ID to this list, redeploy the
-refresh worker, and run it. Configure its local chat path if using local development.
+refresh worker and chat API, and run the worker. The chat API packages this same
+list for local defaults and hosted S3 paths.
 S3 publication is atomic per file, not across files; an upload failure can leave
 regions with different refresh times until the retry succeeds.

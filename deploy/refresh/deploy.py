@@ -141,7 +141,11 @@ aws("iam", "put-role-policy", {
     }]}),
 })
 variables = chat["Environment"]["Variables"].copy()
-variables.update({f"F3_ANALYTICS_REGIONS__{region}": f"s3://{BUCKET}/{key}" for region, key in KEYS.items()})
+for region in SUPPORTED_REGIONS:
+    variables.pop(f"F3_ANALYTICS_REGIONS__{region}", None)
+variables["F3_ANALYTICS_S3_PREFIX"] = f"s3://{BUCKET}/{PREFIX}"
+if sum(len(key.encode()) + len(value.encode()) for key, value in variables.items()) > 4096:
+    raise RuntimeError("Chat environment exceeds Lambda's 4 KiB limit")
 aws("lambda", "update-function-configuration", {"FunctionName": "F3Pax-sandbox",
     "RevisionId": chat["RevisionId"], "Environment": {"Variables": variables}})
 aws("lambda", "wait", extra=("function-updated-v2", "--function-name", "F3Pax-sandbox"))

@@ -42,9 +42,13 @@ The sandbox default is `OPENROUTER_MODEL=openai/gpt-6-luna`.
 Snapshot setting:
 
 ```
-F3_ANALYTICS_REGIONS__southfork=s3://f3-data-tools-config-311293999880/analytics/sandbox/southfork.duckdb
-F3_ANALYTICS_REGIONS__goldrush=s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb
+F3_ANALYTICS_S3_PREFIX=s3://f3-data-tools-config-311293999880/analytics/sandbox
 ```
+
+The API appends `/{region}.duckdb` for each ID in the packaged
+`analytics-regions.json`, sourced from `tools/southfork-duckdb/supported_regions.json`.
+This keeps Lambda configuration below its 4 KiB environment limit. Explicit
+`F3_ANALYTICS_REGIONS__{region}` settings still override the shared prefix.
 
 The execution role must have `s3:GetObject` for those exact objects. The sandbox
 snapshot permission is restricted by `lambda:SourceFunctionArn` so the shared
