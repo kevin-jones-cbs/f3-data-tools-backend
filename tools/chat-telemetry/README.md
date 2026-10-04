@@ -86,9 +86,10 @@ one JSON object per turn; see [hosted setup](../../deploy/chat/README.md#hosted-
 No automatic retention cleanup is enabled; delete the local database when no
 longer needed, with the backend stopped.
 
-## Local admin page
+## Admin page
 
-Open **http://localhost:5090/admin/chats** directly (or your local frontend port);
+Open **https://sandbox.d82d0zhpulmga.amplifyapp.com/admin/chats** for hosted logs,
+or **http://localhost:5090/admin/chats** for local development;
 there is no link from member chat.
 Enter the shared admin password configured in `F3_CHAT_ADMIN_PASSWORD` in the
 backend-only `Secrets/chat.local.json` (or environment). Missing configuration
@@ -100,7 +101,8 @@ with the opening question; question counts and usage are combined. A match in
 any follow-up returns the conversation. Select an entry for the full transcript;
 expand each question's details for its model context, SQL, and usage.
 Choose **Sandbox (S3)** (the default) to read hosted chats or **Local chats** for
-the local DuckDB. Sandbox reads use the backend's `kevin-personal` AWS profile;
+the local DuckDB (available locally only). Hosted reads use the sandbox Lambda role;
+local sandbox reads use the backend's `kevin-personal` AWS profile;
 no manual sync or AWS credentials in the browser are needed. The default location
 is `s3://f3-data-tools-config-311293999880/chat-logs/sandbox/` in `us-west-1`.
 Optional local configuration overrides are `F3_CHAT_LOG_AWS_PROFILE`,

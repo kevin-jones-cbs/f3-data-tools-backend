@@ -4,7 +4,7 @@ using System.Text.Json;
 
 namespace F3Lambda.Analytics;
 
-// Local-admin only. Credentials and complete traces stay in the local API process.
+// Used only by authenticated admin endpoints. AWS credentials stay in the backend.
 public sealed class S3ChatLogReader(IAmazonS3 s3, string bucket, string prefix = "chats") : IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
@@ -56,11 +56,18 @@ public sealed class S3ChatLogReader(IAmazonS3 s3, string bucket, string prefix =
         finally { gate.Release(); }
     }
 
-    public async Task<object?> GetAsync(Guid id, CancellationToken ct)
+    public async Task<object?> GetAsync(Guid id, CancellationToken ct, DateOnly? from = null, DateOnly? to = null)
     {
+        if ((from.HasValue || to.HasValue) && (!from.HasValue || !to.HasValue ||
+            from.Value.Year < 2000 || to < from || to.Value.DayNumber - from.Value.DayNumber > 30))
+            throw new ArgumentException("Choose up to 31 days from 2000 onward.");
         await gate.WaitAsync(ct);
         try
         {
+            // Detail requests may reach a different Lambda instance than the list.
+            if (from.HasValue && (cachedFrom != from || cachedTo != to ||
+                DateTimeOffset.UtcNow - refreshedAt > TimeSpan.FromSeconds(60)))
+                await RefreshAsync(from.Value, to!.Value, ct);
             var trace = cache.Values.FirstOrDefault(t => Guid.TryParse(t.Id, out var traceId) && traceId == id);
             if (trace == null) return null;
             var conversation = await ReadConversationAsync(trace, ct);

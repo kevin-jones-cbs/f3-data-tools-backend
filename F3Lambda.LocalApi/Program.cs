@@ -69,21 +69,25 @@ if (!hosted)
         duckDbExecutable, builder.Configuration["F3_CHAT_LOG_SOURCE"] ?? "app"));
     builder.Services.AddSingleton<IChatTelemetry>(sp => sp.GetRequiredService<DuckDbChatTelemetry>());
 }
-if (!hosted)
+builder.Services.AddSingleton<S3ChatLogReader>(sp =>
 {
-    builder.Services.AddSingleton<S3ChatLogReader>(sp =>
+    if (hosted)
     {
-        var profile = builder.Configuration["F3_CHAT_LOG_AWS_PROFILE"] ?? "kevin-personal";
-        var chain = new Amazon.Runtime.CredentialManagement.CredentialProfileStoreChain();
-        if (!chain.TryGetAWSCredentials(profile, out var credentials))
-            throw new InvalidOperationException($"AWS profile '{profile}' is unavailable. Configure it to view sandbox logs.");
-        var client = new AmazonS3Client(credentials, Amazon.RegionEndpoint.GetBySystemName(
-            builder.Configuration["F3_CHAT_LOG_AWS_REGION"] ?? "us-west-1"));
-        return new S3ChatLogReader(client,
-            builder.Configuration["F3_CHAT_LOG_S3_BUCKET"] ?? "f3-data-tools-config-311293999880",
-            builder.Configuration["F3_CHAT_LOG_S3_PREFIX"] ?? "chat-logs/sandbox");
-    });
-}
+        if (string.IsNullOrWhiteSpace(telemetryUri))
+            throw new InvalidOperationException("Hosted chat logs are not configured.");
+        var uri = new Uri(telemetryUri);
+        return new S3ChatLogReader(new AmazonS3Client(), uri.Host, uri.AbsolutePath.Trim('/'));
+    }
+    var profile = builder.Configuration["F3_CHAT_LOG_AWS_PROFILE"] ?? "kevin-personal";
+    var chain = new Amazon.Runtime.CredentialManagement.CredentialProfileStoreChain();
+    if (!chain.TryGetAWSCredentials(profile, out var credentials))
+        throw new InvalidOperationException($"AWS profile '{profile}' is unavailable. Configure it to view sandbox logs.");
+    var client = new AmazonS3Client(credentials, Amazon.RegionEndpoint.GetBySystemName(
+        builder.Configuration["F3_CHAT_LOG_AWS_REGION"] ?? "us-west-1"));
+    return new S3ChatLogReader(client,
+        builder.Configuration["F3_CHAT_LOG_S3_BUCKET"] ?? "f3-data-tools-config-311293999880",
+        builder.Configuration["F3_CHAT_LOG_S3_PREFIX"] ?? "chat-logs/sandbox");
+});
 var cacheRoot = builder.Configuration["F3_ANALYTICS_CACHE_PATH"]
     ?? Path.Combine(Path.GetTempPath(), "f3-analytics");
 AmazonS3Client? s3 = null;
@@ -211,9 +215,8 @@ app.MapPost("/chat/stream", async (ChatRequest request, Func<string, AnalyticsCh
     finally { chatGate.Release(); }
 });
 
-if (!hosted)
 {
-    var adminPassword = builder.Configuration["F3_CHAT_ADMIN_PASSWORD"];
+    var adminAuth = new ChatAdminAuthentication(builder.Configuration["F3_CHAT_ADMIN_PASSWORD"]);
     var admin = app.MapGroup("/admin/chats");
     admin.AddEndpointFilter(async (context, next) =>
     {
@@ -221,25 +224,25 @@ if (!hosted)
         var origin = http.Request.Headers.Origin.ToString();
         var localOrigin = origin.Length == 0 || new[] { "http://localhost:5173", "http://127.0.0.1:5173",
             "http://localhost:5090", "http://127.0.0.1:5090" }.Contains(origin);
-        if (http.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip) ||
-            http.Request.Host.Host is not ("localhost" or "127.0.0.1" or "[::1]" or "::1") || !localOrigin)
-            return Results.StatusCode(403);
         http.Response.Headers.CacheControl = "no-store";
-        if (string.IsNullOrEmpty(adminPassword)) return Results.StatusCode(503);
-        var supplied = http.Request.Headers["X-Chat-Admin-Password"].ToString();
-        if (!System.Security.Cryptography.CryptographicOperations.FixedTimeEquals(
-            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(supplied)),
-            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(adminPassword))))
-            return Results.StatusCode(401);
+        if (!hosted && (http.Connection.RemoteIpAddress is not { } ip || !System.Net.IPAddress.IsLoopback(ip) ||
+            http.Request.Host.Host is not ("localhost" or "127.0.0.1" or "[::1]" or "::1") || !localOrigin))
+            return Results.StatusCode(403);
+        var authStatus = adminAuth.Check(http.Request.Headers["X-Chat-Admin-Password"].ToString());
+        if (authStatus != 200)
+        {
+            if (authStatus == 429) http.Response.Headers.RetryAfter = "60";
+            return Results.StatusCode(authStatus);
+        }
         try { return await next(context); }
         catch (ArgumentException ex) { return Results.BadRequest(new { error = ex.Message }); }
         catch (Exception ex) when (ex is IOException or OperationCanceledException or System.ComponentModel.Win32Exception or Amazon.Runtime.AmazonClientException or InvalidOperationException or JsonException)
-        { return Results.Json(new { error = "Chat logs are unavailable. Check the local AWS profile and S3 access, then refresh." }, statusCode: 503); }
+        { return Results.Json(new { error = "Chat logs are unavailable. Check backend S3 access, then refresh." }, statusCode: 503); }
     });
-    admin.MapGet("", async (HttpContext http, DuckDbChatTelemetry logs, string? source, DateOnly? from, DateOnly? to,
+    admin.MapGet("", async (HttpContext http, string? source, DateOnly? from, DateOnly? to,
         int? offset, string? search, string? status, CancellationToken ct) =>
     {
-        if (source == "sandbox")
+        if (source == "sandbox" || (hosted && string.IsNullOrEmpty(source)))
         {
             var end = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
             if (end.Year < 2000) throw new ArgumentException("Choose dates from 2000 onward.");
@@ -247,18 +250,23 @@ if (!hosted)
             return Results.Ok(await reader.ListAsync(from ?? end.AddDays(-6), end, offset ?? 0, search, status, ct));
         }
         if (!string.IsNullOrEmpty(source) && source != "local") throw new ArgumentException("Invalid log source.");
+        if (hosted) return Results.BadRequest(new { error = "Local chats are available only on the local backend." });
+        var logs = http.RequestServices.GetRequiredService<DuckDbChatTelemetry>();
         var rows = await logs.ListAsync(offset ?? 0, search, status, ct);
         return Results.Ok(new { items = rows.Take(25), hasMore = rows.Length > 25 });
     });
-    admin.MapGet("/{id:guid}", async (HttpContext http, Guid id, DuckDbChatTelemetry logs, string? source, CancellationToken ct) =>
+    admin.MapGet("/{id:guid}", async (HttpContext http, Guid id, string? source, DateOnly? from, DateOnly? to, CancellationToken ct) =>
     {
-        if (source == "sandbox")
+        if (source == "sandbox" || (hosted && string.IsNullOrEmpty(source)))
         {
             var reader = http.RequestServices.GetRequiredService<S3ChatLogReader>();
-            var record = await reader.GetAsync(id, ct);
+            var end = to ?? DateOnly.FromDateTime(DateTime.UtcNow);
+            var record = await reader.GetAsync(id, ct, from ?? end.AddDays(-6), end);
             return record != null ? Results.Ok(record) : Results.NotFound();
         }
         if (!string.IsNullOrEmpty(source) && source != "local") throw new ArgumentException("Invalid log source.");
+        if (hosted) return Results.BadRequest(new { error = "Local chats are available only on the local backend." });
+        var logs = http.RequestServices.GetRequiredService<DuckDbChatTelemetry>();
         var row = await logs.GetAsync(id, ct);
         if (!row.HasValue) return Results.NotFound();
         var recordNode = System.Text.Json.Nodes.JsonNode.Parse(row.Value.GetRawText())!.AsObject();
@@ -271,11 +279,6 @@ if (!hosted)
         return Results.Ok(recordNode);
     });
 
-}
-else
-{
-    app.MapGet("/admin/chats", () => Results.StatusCode(503));
-    app.MapGet("/admin/chats/{id:guid}", () => Results.StatusCode(503));
 }
 
 app.MapGet("/health", () => Results.Ok(new { status = "ok" }));

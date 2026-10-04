@@ -112,9 +112,10 @@ F3_CHAT_LOG_S3_URI=s3://f3-data-tools-config-311293999880/chat-logs/sandbox/
 
 The execution role's `F3SandboxChatTelemetryWrite` inline policy is checked in as
 `telemetry-policy.json`. It permits only `s3:PutObject` within this prefix, with
-the same sandbox source-function restriction used by snapshot access. It grants
-no log reading or deletion permissions. Local viewing uses the `kevin-personal`
-AWS profile, with no AWS credentials sent to the browser.
+the same sandbox source-function restriction used by snapshot access. This writer policy grants
+no log reading or deletion permissions. Hosted admin reading has a separate policy. Local viewing uses the `kevin-personal`
+AWS profile; hosted viewing uses the sandbox Lambda role. No AWS credentials are
+sent to the browser.
 
 Writes are awaited before request completion with a separate five-second timeout,
 including when the client disconnects. Storage failures log a warning and do not
@@ -149,7 +150,7 @@ Status returns `configured: false` until the OpenRouter key and model are set.
 A status request validates the snapshot without invoking a paid AI model.
 
 Local development still saves the separate telemetry DuckDB. Hosted chat logs
-are stored privately in S3; `/admin/chats` returns 503 on Lambda.
+are stored privately in S3. The hosted `/admin/chats` API requires the admin password.
 The member-facing Function URL remains unauthenticated, as before.
 
 Conversation review: opening a saved turn shows the stored conversation, oldest
@@ -175,3 +176,29 @@ loaded turns in the aggregates. The opening question titles the item, its timest
 shows latest activity, and `turn_count` counts loaded turns. S3 sidebar totals and
 summary cards cover the selected date window; opening a conversation still reads
 its indexed transcript across dates.
+
+## Hosted saved-chat admin
+
+Open https://sandbox.d82d0zhpulmga.amplifyapp.com/admin/chats and use the existing
+admin password. South Fork and Gold Rush conversations share the list, with region
+labels. No local process is needed. Local development retains its loopback-only
+admin restrictions and optional local DuckDB source.
+
+After deploying the current API, enable access from the backend directory:
+
+```sh
+python3 deploy/chat/enable-admin.py --profile kevin-personal
+```
+
+This account-checked script reuses the existing Lambda admin password or copies
+`F3_CHAT_ADMIN_PASSWORD` from the ignored local backend settings. It preserves other
+Lambda settings and configures only sandbox log `GetObject` and prefix-restricted
+`ListBucket` permissions, conditioned on the sandbox source function. Secrets are
+never printed, committed, or put in command arguments. No public S3 access is added.
+
+List and detail requests require `X-Chat-Admin-Password`; missing configuration
+fails closed. Responses use `Cache-Control: no-store`. Ten failed password attempts
+per minute block admin requests for the remainder of that minute per Lambda instance;
+this is a per-instance limit, not a shared account-wide limiter. The browser retains
+the password only in page memory. Detail requests include the selected date range
+so a fresh Lambda instance can load the conversation independently of list requests.

@@ -15,6 +15,20 @@ public class S3ChatLogReaderTests
     private static JsonElement Json(object value) => JsonSerializer.SerializeToElement(value, Options);
 
     [Fact]
+    public async Task DetailLoadsSelectedWindowWithoutPriorListOnThisInstance()
+    {
+        using var s3 = new FakeS3();
+        var trace = new ChatTrace { StartedAt = new DateTimeOffset(2026, 9, 30, 1, 0, 0, TimeSpan.Zero),
+            Region = "goldrush", Request = new([new("user", "Gold Rush question")], Region: "goldrush") };
+        s3.Add(trace);
+        var reader = new S3ChatLogReader(s3, "bucket", "logs");
+        var detail = Json((await reader.GetAsync(Guid.Parse(trace.Id), default, Day, Day))!);
+        Assert.Equal("goldrush", detail.GetProperty("region").GetString());
+        Assert.Equal(trace.Id, detail.GetProperty("event").GetProperty("id").GetString());
+        await Assert.ThrowsAsync<ArgumentException>(() => reader.GetAsync(Guid.Parse(trace.Id), default, Day.AddDays(-31), Day));
+    }
+
+    [Fact]
     public async Task PagesSearchAndSummaryReuseDownloadsAndPreserveMissingUsage()
     {
         using var s3 = new FakeS3();
