@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Momento.Sdk;
 using Momento.Sdk.Auth;
 using Momento.Sdk.Config;
@@ -10,6 +11,10 @@ namespace F3Lambda.Data
 {
     public static class CacheHelper
     {
+        // Opt-in cache for local previews; never shares data with Momento.
+        private static readonly ConcurrentDictionary<string, (string Value, DateTime Expires)> localCache = new();
+        private static bool UseLocalCache => IsEnabled(Environment.GetEnvironmentVariable("F3_LOCAL_MEMORY_CACHE"));
+
         public const string SkipMomentoEnvironmentVariable = "F3_SKIP_MOMENTO";
         private const string MomentoTokenEnvironmentVariable = "F3_MOMENTO_TOKEN";
         private static readonly Lazy<ICredentialProvider> authProvider = new(() => new EnvMomentoTokenProvider(MomentoTokenEnvironmentVariable));
@@ -54,7 +59,13 @@ namespace F3Lambda.Data
         {
             if (ShouldSkipMomento)
             {
-                Console.WriteLine("Momento cache skipped by environment setting.");
+                if (UseLocalCache && localCache.TryGetValue(GetCacheKey(prefix, cacheKeyType), out var entry)
+                    && entry.Expires > DateTime.UtcNow)
+                {
+                    return typeof(T) == typeof(string)
+                        ? (T)(object)entry.Value
+                        : JsonSerializer.Deserialize<T>(entry.Value);
+                }
                 return default(T);
             }
 
@@ -95,7 +106,8 @@ namespace F3Lambda.Data
         {
             if (ShouldSkipMomento)
             {
-                Console.WriteLine("Momento cache write skipped by environment setting.");
+                if (UseLocalCache)
+                    localCache[GetCacheKey(prefix, cacheKeyType)] = (data, DateTime.UtcNow.Add(DEFAULT_TTL));
                 return;
             }
 
@@ -120,7 +132,7 @@ namespace F3Lambda.Data
         {
             if (ShouldSkipMomento)
             {
-                Console.WriteLine("Momento cache clear skipped by environment setting.");
+                if (UseLocalCache) localCache.Clear();
                 return;
             }
 
@@ -131,14 +143,18 @@ namespace F3Lambda.Data
                 {
                     await client.DeleteAsync(cacheName, GetCacheKey(region.DisplayName, cacheKeyType));
                 }
+                await client.DeleteAsync(cacheName, GetCacheKey(
+                    RegionSummaryCalculator.CachePrefix(region.DisplayName, RegionSummaryCalculator.CurrentSacramentoYear),
+                    CacheKeyType.RegionSummary));
             }
+            await ClearSectorDataAsync();
         }
 
         public static async Task ClearSectorDataAsync()
         {
             if (ShouldSkipMomento)
             {
-                Console.WriteLine("Momento sector cache clear skipped by environment setting.");
+                if (UseLocalCache) localCache.Clear();
                 return;
             }
 
@@ -147,6 +163,10 @@ namespace F3Lambda.Data
                 authProvider.Value,
                 DEFAULT_TTL);
             await client.DeleteAsync(cacheName, GetCacheKey("SacSector", CacheKeyType.SectorData));
+            await client.DeleteAsync(cacheName, GetCacheKey("SacSectorLegacy", CacheKeyType.SectorData));
+            await client.DeleteAsync(cacheName, GetCacheKey(
+                RegionSummaryCalculator.CachePrefix("SacSector", RegionSummaryCalculator.CurrentSacramentoYear),
+                CacheKeyType.SectorData));
         }
     }
 }

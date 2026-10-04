@@ -191,7 +191,7 @@ public class Function
             [LambdaActions.GetFromCache] = async (input, sheetsService, region) =>
                 await CacheHelper.GetCachedDataAsync<string>(RequireRegion(region).DisplayName, input.CacheKey) ?? "Miss",
             [LambdaActions.GetSectorDataSummaryAsync] = async (input, sheetsService, region) =>
-                await GetSectorDataSummaryAsync(sheetsService),
+                await GetSectorDataSummaryAsync(sheetsService, input.ThisYear),
             [LambdaActions.GetSectorData] = async (input, sheetsService, region) =>
                 await GetSectorDataAsync(sheetsService),
             [LambdaActions.GetTerracottaChallenge] = async (input, sheetsService, region) =>
@@ -314,9 +314,16 @@ public class Function
         var cacheKeyType = CacheKeyType.AllData;
         var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, cacheKeyType);
 
-        if (cachedData != null && compress)
+        if (cachedData != null)
         {
-            return cachedData;
+            if (compress) return cachedData;
+
+            // Summary calculations also reuse the compressed source cache.
+            var bytes = Convert.FromBase64String(cachedData);
+            using var stream = new MemoryStream(bytes, 4, bytes.Length - 4);
+            using var gzip = new GZipStream(stream, CompressionMode.Decompress);
+            using var reader = new StreamReader(gzip, Encoding.UTF8);
+            return await reader.ReadToEndAsync();
         }
 
         // Load all master data sheets in parallel
@@ -880,7 +887,7 @@ public class Function
     private async Task<SectorData> GetSectorDataAsync(SheetsService sheetsService)
     {
         // Check cache
-        var cachedData = await CacheHelper.GetCachedDataAsync<SectorData>("SacSector", CacheKeyType.SectorData);
+        var cachedData = await CacheHelper.GetCachedDataAsync<SectorData>("SacSectorLegacy", CacheKeyType.SectorData);
         if (cachedData != null)
         {
             return cachedData;
@@ -983,15 +990,18 @@ public class Function
         };
 
         // Save to cache
-        await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, JsonSerializer.Serialize(rtn));
+        await CacheHelper.SetCachedDataAsync("SacSectorLegacy", CacheKeyType.SectorData, JsonSerializer.Serialize(rtn));
 
         return rtn;
     }
 
-    private async Task<string> GetSectorDataSummaryAsync(SheetsService sheetsService)
+    private async Task<string> GetSectorDataSummaryAsync(SheetsService sheetsService, bool thisYear = false)
     {
+        int? year = thisYear ? RegionSummaryCalculator.CurrentSacramentoYear : null;
+        var cachePrefix = RegionSummaryCalculator.CachePrefix("SacSector", year);
+
         // Check cache
-        var cachedData = await CacheHelper.GetCachedDataAsync<string>("SacSector", CacheKeyType.SectorData);
+        var cachedData = await CacheHelper.GetCachedDataAsync<string>(cachePrefix, CacheKeyType.SectorData);
         if (cachedData != null)
         {
             return cachedData;
@@ -1004,7 +1014,7 @@ public class Function
         // Get the summary data for each region in parallel (much faster than full AllData)
         var tasks = allRegions.Select(async region =>
         {
-            var regionSummaryJson = await GetRegionSummaryAsync(sheetsService, region);
+            var regionSummaryJson = await GetRegionSummaryAsync(sheetsService, region, year);
             return (region, regionSummaryJson);
         });
 
@@ -1087,7 +1097,7 @@ public class Function
         var compressedJson = Compress(json);
 
         // Save to cache (compressed)
-        await CacheHelper.SetCachedDataAsync("SacSector", CacheKeyType.SectorData, compressedJson);
+        await CacheHelper.SetCachedDataAsync(cachePrefix, CacheKeyType.SectorData, compressedJson);
 
         return compressedJson;
     }
@@ -1185,12 +1195,13 @@ public class Function
         }
     }
 
-    private async Task<string> GetRegionSummaryAsync(SheetsService sheetsService, Region region)
+    private async Task<string> GetRegionSummaryAsync(SheetsService sheetsService, Region region, int? year = null)
     {
         try
         {
+            var cachePrefix = RegionSummaryCalculator.CachePrefix(region.DisplayName, year);
             // Check cache first
-            var cachedData = await CacheHelper.GetCachedDataAsync<string>(region.DisplayName, CacheKeyType.RegionSummary);
+            var cachedData = await CacheHelper.GetCachedDataAsync<string>(cachePrefix, CacheKeyType.RegionSummary);
             if (cachedData != null)
             {
                 return cachedData;
@@ -1205,81 +1216,16 @@ public class Function
                 WriteIndented = false
             };
 
-            var allData = JsonSerializer.Deserialize<AllData>(allDataJson, options);
+            var allData = JsonSerializer.Deserialize<AllData>(allDataJson, options)
+                ?? throw new InvalidOperationException("Missing regional data for sector summary.");
 
-            // Group by pax name to get aggregated counts
-            var paxData = allData.Posts
-                .GroupBy(x => x.Pax.Trim())
-                .Select(x => new
-                {
-                    PaxName = x.Key,
-                    Data = new PaxRegionData(
-                        x.Key,
-                        x.Count(),
-                        x.Count(y => y.IsQ),
-                        x.Min(p => p.Date)
-                    )
-                })
-                .ToDictionary(x => x.PaxName, x => x.Data);
-
-            // Handle historical data if it exists
-            if (allData.HistoricalData != null && allData.HistoricalData.Any())
-            {
-                var historicalPaxData = allData.HistoricalData
-                    .GroupBy(x => x.PaxName)
-                    .Select(x => new
-                    {
-                        PaxName = x.Key,
-                        Data = new PaxRegionData(
-                            x.Key,
-                            x.Sum(y => y.PostCount),
-                            x.Sum(y => y.QCount),
-                            x.Min(y => y.FirstPost.GetValueOrDefault())
-                        )
-                    })
-                    .ToDictionary(x => x.PaxName, x => x.Data);
-
-                // Combine current and historical data
-                foreach (var histPax in historicalPaxData)
-                {
-                    if (paxData.TryGetValue(histPax.Key, out var currentData))
-                    {
-                        // Combine: sum counts, take earlier first post date
-                        paxData[histPax.Key] = new PaxRegionData(
-                            histPax.Key,
-                            currentData.PostCount + histPax.Value.PostCount,
-                            currentData.QCount + histPax.Value.QCount,
-                            currentData.FirstPost < histPax.Value.FirstPost ? currentData.FirstPost : histPax.Value.FirstPost
-                        );
-                    }
-                    else
-                    {
-                        // Add historical data for PAX not in current data
-                        paxData[histPax.Key] = histPax.Value;
-                    }
-                }
-            }
-
-            // Calculate recent unique PAX count (last 30 days)
-            var recentUniquePaxCount = allData.Posts
-                .Where(x => x.Date >= DateTime.Now.AddDays(-30))
-                .Select(x => x.Pax.Trim())
-                .Distinct()
-                .Count();
-
-            // Create the RegionSummaryData object
-            var regionSummary = new RegionSummaryData
-            {
-                PaxData = paxData,
-                AoCount = allData.Aos?.Count ?? 0,
-                RecentUniquePaxCount = recentUniquePaxCount
-            };
+            var regionSummary = RegionSummaryCalculator.Calculate(allData, year, DateTime.Now);
 
             // Serialize the result
             var serialized = JsonSerializer.Serialize(regionSummary);
 
             // Cache it
-            await CacheHelper.SetCachedDataAsync(region.DisplayName, CacheKeyType.RegionSummary, serialized);
+            await CacheHelper.SetCachedDataAsync(cachePrefix, CacheKeyType.RegionSummary, serialized);
 
             return serialized;
         }
