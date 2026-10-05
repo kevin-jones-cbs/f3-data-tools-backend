@@ -57,16 +57,17 @@ class RefreshTests(unittest.TestCase):
     @patch.object(lambda_function.subprocess, "check_output", return_value="2026-09-30\n")
     @patch.object(lambda_function, "build_database")
     @patch.object(lambda_function.subprocess, "run")
-    def test_publishes_both_validated_files_with_correct_region_and_metadata(self, run, build, query):
+    def test_publishes_all_validated_files_with_correct_region_and_metadata(self, run, build, query):
         run.side_effect = self.export
         build.side_effect = self.build
         uploaded = []
         def put(**kwargs):
-            self.assertEqual(2, build.call_count)
+            self.assertEqual(len(refresh.SUPPORTED_REGIONS), build.call_count)
             uploaded.append({**kwargs, "bytes": kwargs["Body"].read()})
         self.s3.put_object.side_effect = put
         result = lambda_function.handler({}, None)
-        self.assertEqual(["southfork", "goldrush"], list(result["regions"]))
+        self.assertEqual(list(refresh.SUPPORTED_REGIONS), list(result["regions"]))
+        self.assertEqual(len(refresh.SUPPORTED_REGIONS), len(uploaded))
         for region, item in zip(result["regions"], uploaded):
             self.assertEqual(region.encode(), item["bytes"])
             self.assertEqual(f"analytics/sandbox/{region}.duckdb", item["Key"])

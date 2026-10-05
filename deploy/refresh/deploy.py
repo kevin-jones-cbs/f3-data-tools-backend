@@ -86,7 +86,7 @@ policy(ROLE, [
      "Resource": [f"arn:aws:s3:::{BUCKET}/{key}" for key in KEYS.values()]},
 ])
 configuration = {"FunctionName": FUNCTION, "Runtime": "python3.13", "Role": execution_role,
-    "Handler": "lambda_function.handler", "Timeout": 600, "MemorySize": 1024,
+    "Handler": "lambda_function.handler", "Timeout": 900, "MemorySize": 1024,
     "Environment": {"Variables": {"GOOGLE_SVC_ACT_JSON": google, "SNAPSHOT_BUCKET": BUCKET,
         "SNAPSHOT_PREFIX": PREFIX, "PATH": "/var/task:/var/lang/bin:/usr/local/bin:/usr/bin:/bin:/opt/bin",
         "DOTNET_SYSTEM_GLOBALIZATION_INVARIANT": "1",

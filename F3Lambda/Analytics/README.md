@@ -142,8 +142,8 @@ Configure one isolated snapshot per region in `Secrets/chat.local.json`:
 existing eval fixtures). Missing region mappings return unavailable; there is no
 cross-region fallback. Every configured snapshot must use the same schema, with
 that region ID in all data tables and import_metadata. The backend checks this
-before sending any question to the model. The importer refreshes South Fork and Gold Rush together, using
+before sending any question to the model. The importer refreshes South Fork, Gold Rush, and SacTown together, using
 `tools/southfork-duckdb/supported_regions.json` as its supported-region list.
-Local chat defaults to both generated files; explicit region paths override them.
+Local chat defaults to all generated files; explicit region paths override them.
 For compatibility older API clients that omit region still default to South Fork;
 the frontend and eval harness now send it explicitly.

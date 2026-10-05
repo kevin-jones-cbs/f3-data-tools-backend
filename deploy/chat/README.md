@@ -86,12 +86,15 @@ aws s3 cp tools/southfork-duckdb/data/southfork.duckdb \
 aws s3 cp tools/southfork-duckdb/data/goldrush.duckdb \
   s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb \
   --profile kevin-personal --region us-west-1
+aws s3 cp tools/southfork-duckdb/data/sactown.duckdb \
+  s3://f3-data-tools-config-311293999880/analytics/sandbox/sactown.duckdb \
+  --profile kevin-personal --region us-west-1
 ```
 
 Later requests pick up the upload within five minutes. No deployment is needed.
 Only the attendance snapshots are uploaded by these commands; the frozen eval
 fixture and local chat logs remain local. A separate
-[scheduled refresh Lambda](../refresh/README.md) refreshes both sandbox snapshots
+[scheduled refresh Lambda](../refresh/README.md) refreshes all supported sandbox snapshots
 daily at 05:00 America/Los_Angeles through AWS EventBridge Scheduler.
 
 ## Hosted chat telemetry
@@ -180,7 +183,7 @@ its indexed transcript across dates.
 ## Hosted saved-chat admin
 
 Open https://sandbox.d82d0zhpulmga.amplifyapp.com/admin/chats and use the existing
-admin password. South Fork and Gold Rush conversations share the list, with region
+admin password. South Fork, Gold Rush, and SacTown conversations share the list, with region
 labels. No local process is needed. Local development retains its loopback-only
 admin restrictions and optional local DuckDB source.
 

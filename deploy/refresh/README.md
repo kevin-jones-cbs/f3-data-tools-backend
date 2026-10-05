@@ -1,4 +1,4 @@
-# Daily sandbox attendance refresh: South Fork and Gold Rush
+# Daily sandbox attendance refresh: South Fork, Gold Rush, and SacTown
 
 AWS EventBridge Scheduler runs `F3AnalyticsRefresh-sandbox-daily` at **05:00
 America/Los_Angeles** every day (daylight-saving aware), in account `311293999880`,
@@ -7,12 +7,13 @@ no laptop or public HTTP endpoint is involved.
 
 The Lambda runs the existing Sheets exporter with Momento bypassed, builds and
 validates a separate DuckDB in `/tmp` for every region in
-`tools/southfork-duckdb/supported_regions.json`, then uploads both snapshots:
+`tools/southfork-duckdb/supported_regions.json`, then uploads all three snapshots:
 
 - `s3://f3-data-tools-config-311293999880/analytics/sandbox/southfork.duckdb`
 - `s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb`
+- `s3://f3-data-tools-config-311293999880/analytics/sandbox/sactown.duckdb`
 
-An export or validation failure preserves both previous objects. S3 uploads are
+An export or validation failure preserves all previous objects. S3 uploads are
 atomic per file; an upload failure can leave different refresh times until retry. Sandbox chat picks
 up a changed object within five minutes of subsequent requests. Chat logs are
 separate and unaffected.
@@ -21,7 +22,7 @@ The worker has a dedicated role permitting only writes to those snapshots and it
 CloudWatch log streams. The scheduler role can invoke only this worker. The
 worker copies the existing sandbox Sheets credential during deployment; redeploy
 after rotating that credential or changing packaged region mappings. It has
-1024 MiB memory, a ten-minute timeout, and concurrency limited to one. Scheduler
+1024 MiB memory, a fifteen-minute timeout, and concurrency limited to one. Scheduler
 delivery retries are bounded to two within one hour; Lambda's normal asynchronous
 execution retries also apply. CloudWatch logs are retained for 30 days. No email
 alerts are configured.
@@ -66,7 +67,7 @@ aws logs tail /aws/lambda/F3AnalyticsRefresh-sandbox --since 1d \
 Successful results include `regions`, with `refreshedAt`, `latestAttendance`, and
 per-table counts for each region.
 Inspect the invocation's `FunctionError` and result before treating HTTP 200 as
-success. The chat `/chat/status?region=southfork` and `/chat/status?region=goldrush` endpoints show snapshot freshness
+success. The chat `/chat/status?region=southfork`, `/chat/status?region=goldrush`, and `/chat/status?region=sactown` endpoints show snapshot freshness
 without calling the AI model. The existing local `refresh.py` command remains
 available for manual refreshes.
 
