@@ -89,6 +89,9 @@ aws s3 cp tools/southfork-duckdb/data/goldrush.duckdb \
 aws s3 cp tools/southfork-duckdb/data/sactown.duckdb \
   s3://f3-data-tools-config-311293999880/analytics/sandbox/sactown.duckdb \
   --profile kevin-personal --region us-west-1
+aws s3 cp tools/southfork-duckdb/data/motherlode.duckdb \
+  s3://f3-data-tools-config-311293999880/analytics/sandbox/motherlode.duckdb \
+  --profile kevin-personal --region us-west-1
 ```
 
 Later requests pick up the upload within five minutes. No deployment is needed.
@@ -183,7 +186,7 @@ its indexed transcript across dates.
 ## Hosted saved-chat admin
 
 Open https://sandbox.d82d0zhpulmga.amplifyapp.com/admin/chats and use the existing
-admin password. South Fork, Gold Rush, and SacTown conversations share the list, with region
+admin password. South Fork, Gold Rush, SacTown, and Mother Lode conversations share the list, with region
 labels. No local process is needed. Local development retains its loopback-only
 admin restrictions and optional local DuckDB source.
 

@@ -1,6 +1,6 @@
 # Local regional DuckDB snapshots
 
-Run from this directory to refresh **South Fork, Gold Rush, and SacTown**:
+Run from this directory to refresh **South Fork, Gold Rush, SacTown, and Mother Lode**:
 
 ```sh
 python3 refresh.py
@@ -50,7 +50,7 @@ are not copied into the database. No database server or AI service is required.
 | `monthly_attendance` | Monthly attendance, unique PAX, and Q counts by AO |
 | `pax_summary` | Regular attendance and Q totals, first/last dates, and AOs visited |
 
-All tables include the snapshot's region ID (`southfork`, `goldrush`, or `sactown`). Names and attendance multiplicity are
+All tables include the snapshot's region ID (`southfork`, `goldrush`, `sactown`, or `motherlode`). Names and attendance multiplicity are
 preserved from the backend; the import does not silently deduplicate or merge
 people. Attendance names may include downrange PAX absent from the roster.
 The AO schedule can have multiple rows per name and excludes retired AOs under

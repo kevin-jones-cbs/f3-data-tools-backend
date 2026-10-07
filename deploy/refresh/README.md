@@ -1,4 +1,4 @@
-# Daily sandbox attendance refresh: South Fork, Gold Rush, and SacTown
+# Daily sandbox attendance refresh: South Fork, Gold Rush, SacTown, and Mother Lode
 
 AWS EventBridge Scheduler runs `F3AnalyticsRefresh-sandbox-daily` at **05:00
 America/Los_Angeles** every day (daylight-saving aware), in account `311293999880`,
@@ -7,11 +7,12 @@ no laptop or public HTTP endpoint is involved.
 
 The Lambda runs the existing Sheets exporter with Momento bypassed, builds and
 validates a separate DuckDB in `/tmp` for every region in
-`tools/southfork-duckdb/supported_regions.json`, then uploads all three snapshots:
+`tools/southfork-duckdb/supported_regions.json`, then uploads all supported snapshots:
 
 - `s3://f3-data-tools-config-311293999880/analytics/sandbox/southfork.duckdb`
 - `s3://f3-data-tools-config-311293999880/analytics/sandbox/goldrush.duckdb`
 - `s3://f3-data-tools-config-311293999880/analytics/sandbox/sactown.duckdb`
+- `s3://f3-data-tools-config-311293999880/analytics/sandbox/motherlode.duckdb`
 
 An export or validation failure preserves all previous objects. S3 uploads are
 atomic per file; an upload failure can leave different refresh times until retry. Sandbox chat picks
@@ -67,7 +68,7 @@ aws logs tail /aws/lambda/F3AnalyticsRefresh-sandbox --since 1d \
 Successful results include `regions`, with `refreshedAt`, `latestAttendance`, and
 per-table counts for each region.
 Inspect the invocation's `FunctionError` and result before treating HTTP 200 as
-success. The chat `/chat/status?region=southfork`, `/chat/status?region=goldrush`, and `/chat/status?region=sactown` endpoints show snapshot freshness
+success. The chat `/chat/status?region=southfork`, `/chat/status?region=goldrush`, `/chat/status?region=sactown`, and `/chat/status?region=motherlode` endpoints show snapshot freshness
 without calling the AI model. The existing local `refresh.py` command remains
 available for manual refreshes.
 
